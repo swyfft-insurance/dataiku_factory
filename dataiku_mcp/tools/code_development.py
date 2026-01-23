@@ -16,11 +16,16 @@ def get_recipe_code(
 ) -> Dict[str, Any]:
     """
     Extract actual Python/SQL code from recipes.
-    
+
+    Supports multiple recipe types:
+    - Code recipes (python, r, sql, pyspark, scala): uses settings.get_code()
+    - SQL Query recipes (sql_query): uses settings.get_payload() which returns SQL as string
+    - Visual recipes (join, grouping, etc.): returns recipe params as JSON config
+
     Args:
         project_key: The project key
         recipe_name: Name of the recipe
-        
+
     Returns:
         Dict containing code and recipe information
     """
@@ -28,29 +33,18 @@ def get_recipe_code(
         project = get_project(project_key)
         recipe = project.get_recipe(recipe_name)
         settings = recipe.get_settings()
-        
-        # Get recipe metadata
+
+        # Get recipe metadata - try multiple methods
+        recipe_type = getattr(recipe, 'type', None) or "unknown"
+        inputs = []
+        outputs = []
+
         try:
-            recipe_definition = recipe.get_definition()
-            recipe_type = recipe_definition.get("type", "unknown")
-            inputs = [inp["ref"] for inp in recipe_definition.get("inputs", [])]
-            outputs = [out["ref"] for out in recipe_definition.get("outputs", [])]
-        except AttributeError:
-            # Fallback for older API versions
-            try:
-                recipe_def_payload = recipe.get_definition_and_payload()
-                payload = recipe_def_payload.get_payload()
-                if isinstance(payload, dict):
-                    recipe_type = payload.get("type", "unknown")
-                else:
-                    recipe_type = "unknown"
-                inputs = []
-                outputs = []
-            except:
-                recipe_type = "unknown"
-                inputs = []
-                outputs = []
-        
+            inputs = [inp["ref"] for inp in recipe.get_inputs()]
+            outputs = [out["ref"] for out in recipe.get_outputs()]
+        except:
+            pass
+
         recipe_info = {
             "name": recipe_name,
             "type": recipe_type,
@@ -58,77 +52,71 @@ def get_recipe_code(
             "inputs": inputs,
             "outputs": outputs
         }
-        
-        # Extract code based on recipe type
+
+        # Extract code using a priority-based approach
         code = ""
         code_info = {}
-        
-        if recipe_type in ["python", "r", "scala"]:
-            # Code recipes
+
+        # 1. Try settings.get_code() - works for python, r, sql, pyspark, scala recipes
+        try:
             code = settings.get_code()
-            code_info = {
-                "language": recipe_type,
-                "line_count": len(code.split('\n')) if code else 0,
-                "char_count": len(code) if code else 0
-            }
-            
-        elif recipe_type == "sql":
-            # SQL recipes
-            code = settings.get_code()
-            code_info = {
-                "language": "sql",
-                "line_count": len(code.split('\n')) if code else 0,
-                "char_count": len(code) if code else 0
-            }
-            
-        elif recipe_type == "pyspark":
-            # PySpark recipes
-            code = settings.get_code()
-            code_info = {
-                "language": "python",
-                "engine": "pyspark",
-                "line_count": len(code.split('\n')) if code else 0,
-                "char_count": len(code) if code else 0
-            }
-            
-        elif recipe_type in ["join", "grouping", "window", "distinct", "sort", "topn", "sync"]:
-            # Visual recipes - extract configuration as "pseudo-code"
+            if code:
+                language = recipe_type if recipe_type in ["python", "r", "scala"] else "sql" if recipe_type in ["sql", "pyspark"] else "unknown"
+                if recipe_type == "pyspark":
+                    language = "python"
+                code_info = {
+                    "language": language,
+                    "source": "get_code",
+                    "line_count": len(code.split('\n')),
+                    "char_count": len(code)
+                }
+        except:
+            pass
+
+        # 2. Try settings.get_payload() - works for sql_query recipes (returns SQL as string)
+        if not code:
+            try:
+                payload = settings.get_payload()
+                if isinstance(payload, str) and payload.strip():
+                    code = payload
+                    code_info = {
+                        "language": "sql",
+                        "source": "get_payload",
+                        "line_count": len(code.split('\n')),
+                        "char_count": len(code)
+                    }
+                elif isinstance(payload, dict):
+                    # Some recipes store SQL in a dict key
+                    code = payload.get("sql") or payload.get("query") or payload.get("code") or ""
+                    if code:
+                        code_info = {
+                            "language": "sql",
+                            "source": "get_payload",
+                            "line_count": len(code.split('\n')),
+                            "char_count": len(code)
+                        }
+            except:
+                pass
+
+        # 3. Fallback: return recipe_params as JSON config (for visual recipes or debugging)
+        if not code:
             recipe_params = settings.get_recipe_params()
             code = json.dumps(recipe_params, indent=2)
             code_info = {
                 "language": "json",
-                "type": "visual_recipe_config",
-                "line_count": len(code.split('\n')) if code else 0,
-                "char_count": len(code) if code else 0
+                "source": "get_recipe_params",
+                "type": "recipe_config",
+                "line_count": len(code.split('\n')),
+                "char_count": len(code)
             }
-            
-        else:
-            # Other recipe types
-            try:
-                code = settings.get_code()
-                code_info = {
-                    "language": "unknown",
-                    "line_count": len(code.split('\n')) if code else 0,
-                    "char_count": len(code) if code else 0
-                }
-            except:
-                # For recipes without code, get the configuration
-                recipe_params = settings.get_recipe_params()
-                code = json.dumps(recipe_params, indent=2)
-                code_info = {
-                    "language": "json",
-                    "type": "recipe_config",
-                    "line_count": len(code.split('\n')) if code else 0,
-                    "char_count": len(code) if code else 0
-                }
-        
+
         return {
             "status": "ok",
             "recipe_info": recipe_info,
             "code": code,
             "code_info": code_info
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
