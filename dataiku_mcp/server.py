@@ -330,15 +330,47 @@ def run_scenario(
 ) -> Dict[str, Any]:
     """
     Run a scenario manually.
-    
+
     Args:
         project_key: The project key
         scenario_id: ID of the scenario to run
-        
+
     Returns:
         Dict containing run result
     """
     return scenarios.run_scenario(project_key, scenario_id)
+
+@mcp.tool()
+def get_scenario_info(
+    project_key: str,
+    scenario_id: str
+) -> Dict[str, Any]:
+    """
+    Get scenario information including triggers and schedule.
+
+    Args:
+        project_key: The project key
+        scenario_id: ID of the scenario
+
+    Returns:
+        Dict containing scenario info with triggers
+    """
+    return scenarios.get_scenario_info(project_key, scenario_id)
+
+@mcp.tool()
+def list_scenarios(
+    project_key: str
+) -> Dict[str, Any]:
+    """
+    List all scenarios in a project.
+
+    Args:
+        project_key: The project key
+
+    Returns:
+        Dict containing list of scenarios
+    """
+    return scenarios.list_scenarios(project_key)
 
 # Register Advanced Scenario Tools
 @mcp.tool()

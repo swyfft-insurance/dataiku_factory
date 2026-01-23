@@ -128,9 +128,13 @@ def get_project_variables(
         
         # Get project metadata
         metadata = project.get_metadata()
-        
-        # Get project settings
-        settings = project.get_settings()
+
+        # Get project settings (requires admin permission)
+        settings = None
+        try:
+            settings = project.get_settings()
+        except Exception:
+            pass  # Settings not available without admin permission
         
         # Extract key project information
         project_info = {
@@ -171,13 +175,16 @@ def get_project_variables(
         except Exception:
             project_permissions = {"error": "Permissions not available"}
         
-        # Get project settings summary
-        settings_summary = {
-            "bundle_export_options": settings.get_raw().get("bundleExportOptions", {}),
-            "git_reference": settings.get_raw().get("gitReference", {}),
-            "flow_display_settings": settings.get_raw().get("flowDisplaySettings", {}),
-            "notebook_exports": settings.get_raw().get("notebookExports", {})
-        }
+        # Get project settings summary (if available)
+        if settings is not None:
+            settings_summary = {
+                "bundle_export_options": settings.get_raw().get("bundleExportOptions", {}),
+                "git_reference": settings.get_raw().get("gitReference", {}),
+                "flow_display_settings": settings.get_raw().get("flowDisplaySettings", {}),
+                "notebook_exports": settings.get_raw().get("notebookExports", {})
+            }
+        else:
+            settings_summary = {"error": "Settings not available (requires admin permission)"}
         
         # Calculate statistics
         variable_stats = {

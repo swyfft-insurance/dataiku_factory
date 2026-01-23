@@ -41,7 +41,7 @@ def get_scenario_logs(
         # Find the target run
         target_run = None
         if run_id:
-            target_run = next((run for run in runs if run.run_id == run_id), None)
+            target_run = next((run for run in runs if getattr(run, 'id', None) == run_id), None)
             if not target_run:
                 return {
                     "status": "error",
@@ -50,10 +50,10 @@ def get_scenario_logs(
         else:
             # Use the latest run
             target_run = runs[0]
-        
+
         # Extract run information
         run_info = {
-            "run_id": target_run.run_id,
+            "run_id": getattr(target_run, 'id', 'unknown'),
             "start_time": target_run.start_time,
             "end_time": target_run.end_time,
             "outcome": target_run.outcome,
@@ -217,9 +217,9 @@ def get_scenario_steps(
         # Get scenario metadata
         scenario_info = {
             "id": scenario_id,
-            "name": settings.name,
-            "type": settings.type,
-            "active": settings.active,
+            "name": getattr(settings, 'name', scenario_id),
+            "type": getattr(settings, 'type', 'unknown'),
+            "active": getattr(settings, 'active', False),
             "step_count": len(steps)
         }
         

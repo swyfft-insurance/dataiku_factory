@@ -526,18 +526,27 @@ def get_scenario_info(
     try:
         project = get_project(project_key)
         scenario = project.get_scenario(scenario_id)
-        
-        # Get scenario metadata
-        metadata = scenario.get_metadata()
-        
+
+        # Get scenario metadata (may not exist on all scenario types)
+        try:
+            metadata = scenario.get_metadata() if hasattr(scenario, 'get_metadata') else {}
+        except Exception:
+            metadata = {}
+
         # Get scenario settings
         settings = scenario.get_settings()
-        
-        # Get triggers
-        triggers = settings.get_triggers()
-        
+
+        # Get triggers - try raw_triggers first, then get_triggers()
+        try:
+            triggers = getattr(settings, 'raw_triggers', None) or settings.get_triggers()
+        except Exception:
+            triggers = []
+
         # Get scenario status
-        status = scenario.get_status()
+        try:
+            status = scenario.get_status() if hasattr(scenario, 'get_status') else {}
+        except Exception:
+            status = {}
         
         return {
             "status": "ok",
@@ -546,23 +555,24 @@ def get_scenario_info(
                 "name": getattr(settings, 'name', scenario_id),
                 "type": getattr(settings, 'type', 'unknown'),
                 "active": getattr(settings, 'active', False),
-                "description": metadata.get("description", ""),
-                "tags": metadata.get("tags", []),
-                "custom_fields": metadata.get("customFields", {}),
+                "description": metadata.get("description", "") if isinstance(metadata, dict) else "",
+                "tags": metadata.get("tags", []) if isinstance(metadata, dict) else [],
+                "custom_fields": metadata.get("customFields", {}) if isinstance(metadata, dict) else {},
                 "triggers": [
                     {
                         "type": trigger.get('type', 'unknown'),
                         "name": trigger.get('name', 'unnamed'),
-                        "active": trigger.get('active', False)
+                        "active": trigger.get('active', False),
+                        "params": trigger.get('params', {})
                     }
                     for trigger in triggers
-                ],
+                ] if triggers else [],
                 "trigger_count": len(triggers),
                 "last_run": {
-                    "outcome": status.get('lastRunOutcome'),
-                    "start_time": status.get('lastRunStartTime'),
-                    "end_time": status.get('lastRunEndTime'),
-                    "duration": status.get('lastRunDuration')
+                    "outcome": getattr(status, 'last_run_outcome', None) if status else None,
+                    "start_time": getattr(status, 'last_run_start_time', None) if status else None,
+                    "end_time": getattr(status, 'last_run_end_time', None) if status else None,
+                    "duration": getattr(status, 'last_run_duration', None) if status else None
                 },
                 "next_run": scenario.next_run() if hasattr(scenario, 'next_run') else None,
                 "is_active": scenario.is_active() if hasattr(scenario, 'is_active') else None
@@ -613,6 +623,13 @@ def list_scenarios(
                 if active_only and not getattr(settings, 'active', False):
                     continue
                 
+                # Get triggers - try raw_triggers first
+                try:
+                    triggers = getattr(settings, 'raw_triggers', None) or settings.get_triggers()
+                    trigger_count = len(triggers) if triggers else 0
+                except Exception:
+                    trigger_count = 0
+
                 scenarios_info.append({
                     "id": scenario_id,
                     "name": getattr(settings, 'name', scenario_id),
@@ -620,7 +637,7 @@ def list_scenarios(
                     "active": getattr(settings, 'active', False),
                     "description": scenario_data.get('description', ''),
                     "tags": scenario_data.get('tags', []),
-                    "trigger_count": len(settings.get_triggers()) if hasattr(settings, 'get_triggers') else 0
+                    "trigger_count": trigger_count
                 })
                 
             except Exception as e:
