@@ -619,6 +619,55 @@ def get_dataset_info(
         }
 
 
+def get_dataset_post_write_statements(
+    project_key: str,
+    dataset_name: str
+) -> Dict[str, Any]:
+    """
+    Get post-write statements configured for a dataset.
+
+    Post-write statements are SQL that executes AFTER a recipe writes data
+    but BEFORE downstream recipes read it. This is often used for chain
+    calculations, deduplication, and data fixes.
+
+    Args:
+        project_key: The project key containing the dataset
+        dataset_name: Name of the dataset to inspect
+
+    Returns:
+        Dict with post-write statements or error message
+    """
+    try:
+        project = get_project(project_key)
+        dataset = project.get_dataset(dataset_name)
+
+        # Get the raw settings object
+        settings = dataset.get_settings()
+
+        # Access the underlying settings dict
+        raw_settings = settings.settings
+
+        # Get params which contains customPostWriteStatements
+        params = raw_settings.get("params", {})
+        post_write_statements = params.get("customPostWriteStatements", [])
+
+        return {
+            "status": "ok",
+            "dataset_name": dataset_name,
+            "project_key": project_key,
+            "post_write_statements": post_write_statements,
+            "has_post_write": bool(post_write_statements),
+            "statement_count": len(post_write_statements) if post_write_statements else 0,
+            "message": f"Post-write statements for dataset '{dataset_name}' retrieved successfully"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to get post-write statements for dataset '{dataset_name}': {str(e)}"
+        }
+
+
 def clear_dataset(
     project_key: str,
     dataset_name: str,

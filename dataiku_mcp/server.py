@@ -215,15 +215,36 @@ def check_dataset_metrics(
 ) -> Dict[str, Any]:
     """
     Get latest dataset metrics.
-    
+
     Args:
         project_key: The project key
         dataset_name: Name of the dataset
-        
+
     Returns:
         Dict containing metrics data
     """
     return datasets.check_dataset_metrics(project_key, dataset_name)
+
+@mcp.tool()
+def get_dataset_post_write_statements(
+    project_key: str,
+    dataset_name: str
+) -> Dict[str, Any]:
+    """
+    Get post-write statements configured for a dataset.
+
+    Post-write statements are SQL that executes AFTER a recipe writes data
+    but BEFORE downstream recipes read it. This is often used for chain
+    calculations, deduplication, and data fixes.
+
+    Args:
+        project_key: The project key
+        dataset_name: Name of the dataset
+
+    Returns:
+        Dict containing post-write statements
+    """
+    return datasets.get_dataset_post_write_statements(project_key, dataset_name)
 
 # Register Scenario Tools
 @mcp.tool()
