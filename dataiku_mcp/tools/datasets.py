@@ -647,17 +647,19 @@ def get_dataset_post_write_statements(
         # Access the underlying settings dict
         raw_settings = settings.settings
 
-        # Get params which contains customPostWriteStatements
+        # Get params which contains customPostWriteStatements and customPreWriteStatements
         params = raw_settings.get("params", {})
         post_write_statements = params.get("customPostWriteStatements", [])
+        pre_write_statements = params.get("customPreWriteStatements", [])
 
         return {
             "status": "ok",
             "dataset_name": dataset_name,
             "project_key": project_key,
+            "pre_write_statements": pre_write_statements,
             "post_write_statements": post_write_statements,
+            "has_pre_write": bool(pre_write_statements),
             "has_post_write": bool(post_write_statements),
-            "statement_count": len(post_write_statements) if post_write_statements else 0,
             "message": f"Post-write statements for dataset '{dataset_name}' retrieved successfully"
         }
 
