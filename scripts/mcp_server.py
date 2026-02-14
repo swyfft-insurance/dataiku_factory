@@ -3,10 +3,9 @@
 MCP Server entrypoint for Dataiku DSS integration.
 """
 
-import sys
-import asyncio
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 # Add the parent directory to the path so we can import our modules
@@ -44,18 +43,18 @@ def main():
         action="store_true",
         help="Enable verbose logging"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Set logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     # Create server
     try:
         server = create_server()
         logger.info("Starting Dataiku MCP Server...")
-        
+
         # Run server based on transport
         if args.transport == "stdio":
             logger.info("Using stdio transport")
@@ -63,7 +62,7 @@ def main():
         elif args.transport == "sse":
             logger.info(f"Using SSE transport on {args.host}:{args.port}")
             server.run_sse(host=args.host, port=args.port)
-            
+
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:

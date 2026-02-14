@@ -3,24 +3,27 @@ Code and recipe development tools for Dataiku MCP integration.
 """
 
 import ast
-import re
 import json
-import tempfile
-import traceback
-from typing import Dict, Any, List, Optional
-from dataiku_mcp.client import get_client, get_project
+import re
+from typing import Any
+
+from dataiku_mcp.client import get_project
+
 
 def get_recipe_code(
     project_key: str,
     recipe_name: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Extract actual Python/SQL code from recipes.
 
     Supports multiple recipe types:
-    - Code recipes (python, r, sql, pyspark, scala): uses settings.get_code()
-    - SQL Query recipes (sql_query): uses settings.get_payload() which returns SQL as string
-    - Visual recipes (join, grouping, etc.): returns recipe params as JSON config
+    - Code recipes (python, r, sql, pyspark, scala):
+      uses settings.get_code()
+    - SQL Query recipes (sql_query):
+      uses settings.get_payload() which returns SQL
+    - Visual recipes (join, grouping, etc.):
+      returns recipe params as JSON config
 
     Args:
         project_key: The project key
@@ -35,20 +38,30 @@ def get_recipe_code(
         settings = recipe.get_settings()
 
         # Get recipe metadata - try multiple methods
-        recipe_type = getattr(recipe, 'type', None) or "unknown"
+        recipe_type = (
+            getattr(recipe, 'type', None) or "unknown"
+        )
         inputs = []
         outputs = []
 
         try:
-            inputs = [inp["ref"] for inp in recipe.get_inputs()]
-            outputs = [out["ref"] for out in recipe.get_outputs()]
-        except:
+            inputs = [
+                inp["ref"]
+                for inp in recipe.get_inputs()
+            ]
+            outputs = [
+                out["ref"]
+                for out in recipe.get_outputs()
+            ]
+        except Exception:
             pass
 
         recipe_info = {
             "name": recipe_name,
             "type": recipe_type,
-            "engine": settings.get_recipe_params().get("engine", "unknown"),
+            "engine": settings.get_recipe_params().get(
+                "engine", "unknown"
+            ),
             "inputs": inputs,
             "outputs": outputs
         }
@@ -57,48 +70,73 @@ def get_recipe_code(
         code = ""
         code_info = {}
 
-        # 1. Try settings.get_code() - works for python, r, sql, pyspark, scala recipes
+        # 1. Try settings.get_code() - works for
+        # python, r, sql, pyspark, scala recipes
         try:
             code = settings.get_code()
             if code:
-                language = recipe_type if recipe_type in ["python", "r", "scala"] else "sql" if recipe_type in ["sql", "pyspark"] else "unknown"
+                if recipe_type in [
+                    "python", "r", "scala"
+                ]:
+                    language = recipe_type
+                elif recipe_type in ["sql", "pyspark"]:
+                    language = "sql"
+                else:
+                    language = "unknown"
                 if recipe_type == "pyspark":
                     language = "python"
                 code_info = {
                     "language": language,
                     "source": "get_code",
-                    "line_count": len(code.split('\n')),
+                    "line_count": len(
+                        code.split('\n')
+                    ),
                     "char_count": len(code)
                 }
-        except:
+        except Exception:
             pass
 
-        # 2. Try settings.get_payload() - works for sql_query recipes (returns SQL as string)
+        # 2. Try settings.get_payload() - works for
+        # sql_query recipes (returns SQL as string)
         if not code:
             try:
                 payload = settings.get_payload()
-                if isinstance(payload, str) and payload.strip():
+                if (
+                    isinstance(payload, str)
+                    and payload.strip()
+                ):
                     code = payload
                     code_info = {
                         "language": "sql",
                         "source": "get_payload",
-                        "line_count": len(code.split('\n')),
+                        "line_count": len(
+                            code.split('\n')
+                        ),
                         "char_count": len(code)
                     }
                 elif isinstance(payload, dict):
-                    # Some recipes store SQL in a dict key
-                    code = payload.get("sql") or payload.get("query") or payload.get("code") or ""
+                    # Some recipes store SQL in a
+                    # dict key
+                    code = (
+                        payload.get("sql")
+                        or payload.get("query")
+                        or payload.get("code")
+                        or ""
+                    )
                     if code:
                         code_info = {
                             "language": "sql",
                             "source": "get_payload",
-                            "line_count": len(code.split('\n')),
+                            "line_count": len(
+                                code.split('\n')
+                            ),
                             "char_count": len(code)
                         }
-            except:
+            except Exception:
                 pass
 
-        # 3. Fallback: return recipe_params as JSON config (for visual recipes or debugging)
+        # 3. Fallback: return recipe_params as JSON
+        # config (for visual recipes or debugging)
         if not code:
             recipe_params = settings.get_recipe_params()
             code = json.dumps(recipe_params, indent=2)
@@ -120,177 +158,258 @@ def get_recipe_code(
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Failed to get recipe code for '{recipe_name}': {str(e)}"
+            "message": (
+                f"Failed to get recipe code for "
+                f"'{recipe_name}': {str(e)}"
+            )
         }
 
 
 def validate_recipe_syntax(
     project_key: str,
     recipe_name: str,
-    code: Optional[str] = None
-) -> Dict[str, Any]:
+    code: str | None = None
+) -> dict[str, Any]:
     """
     Validate Python/SQL syntax before execution.
-    
+
     Args:
         project_key: The project key
         recipe_name: Name of the recipe
-        code: Optional code to validate (if not provided, gets from recipe)
-        
+        code: Optional code to validate
+            (if not provided, gets from recipe)
+
     Returns:
         Dict containing validation results
     """
     try:
         project = get_project(project_key)
         recipe = project.get_recipe(recipe_name)
-        
+
         # Get code to validate
         if code is None:
             settings = recipe.get_settings()
             code = settings.get_code()
-        
+
         if not code or not code.strip():
             return {
                 "status": "ok",
                 "valid": True,
-                "message": "No code to validate (empty recipe)",
+                "message": (
+                    "No code to validate (empty recipe)"
+                ),
                 "errors": []
             }
-        
+
         try:
             recipe_definition = recipe.get_definition()
-            recipe_type = recipe_definition.get("type", "unknown")
+            recipe_type = recipe_definition.get(
+                "type", "unknown"
+            )
         except AttributeError:
             # Fallback for older API versions
-            recipe_def_payload = recipe.get_definition_and_payload()
-            recipe_type = recipe_def_payload.get_payload().get("type", "unknown")
+            recipe_def_payload = (
+                recipe.get_definition_and_payload()
+            )
+            recipe_type = (
+                recipe_def_payload
+                .get_payload()
+                .get("type", "unknown")
+            )
         validation_results = {
             "recipe_name": recipe_name,
             "recipe_type": recipe_type,
             "code_length": len(code),
             "line_count": len(code.split('\n'))
         }
-        
+
         errors = []
         warnings = []
-        
+
         # Validate based on recipe type
         if recipe_type in ["python", "pyspark"]:
             # Python syntax validation
             try:
                 ast.parse(code)
-                validation_results["python_ast_valid"] = True
+                validation_results[
+                    "python_ast_valid"
+                ] = True
             except SyntaxError as e:
                 errors.append({
                     "type": "syntax_error",
                     "line": e.lineno,
                     "column": e.offset,
                     "message": str(e.msg),
-                    "text": e.text.strip() if e.text else ""
+                    "text": (
+                        e.text.strip() if e.text
+                        else ""
+                    )
                 })
-                validation_results["python_ast_valid"] = False
+                validation_results[
+                    "python_ast_valid"
+                ] = False
             except Exception as e:
                 errors.append({
                     "type": "parse_error",
-                    "message": f"Failed to parse Python code: {str(e)}"
+                    "message": (
+                        "Failed to parse Python "
+                        f"code: {str(e)}"
+                    )
                 })
-                validation_results["python_ast_valid"] = False
-            
+                validation_results[
+                    "python_ast_valid"
+                ] = False
+
             # Check for common Dataiku patterns
             if "dataiku" not in code.lower():
                 warnings.append({
                     "type": "missing_dataiku_import",
-                    "message": "Code doesn't seem to import dataiku package"
+                    "message": (
+                        "Code doesn't seem to import"
+                        " dataiku package"
+                    )
                 })
-            
+
             # Check for input/output dataset handling
-            if "get_dataframe" not in code and "iter_rows" not in code:
+            if (
+                "get_dataframe" not in code
+                and "iter_rows" not in code
+            ):
                 warnings.append({
                     "type": "no_input_handling",
-                    "message": "Code doesn't seem to handle input datasets"
+                    "message": (
+                        "Code doesn't seem to handle"
+                        " input datasets"
+                    )
                 })
-            
-            if "write_with_schema" not in code and "write_dataframe" not in code:
+
+            if (
+                "write_with_schema" not in code
+                and "write_dataframe" not in code
+            ):
                 warnings.append({
                     "type": "no_output_handling",
-                    "message": "Code doesn't seem to write to output datasets"
+                    "message": (
+                        "Code doesn't seem to write"
+                        " to output datasets"
+                    )
                 })
-                
+
         elif recipe_type == "sql":
             # SQL syntax validation (basic)
             sql_errors = []
-            
+
             # Basic SQL syntax checks
-            if not re.search(r'\bSELECT\b', code, re.IGNORECASE):
+            if not re.search(
+                r'\bSELECT\b', code, re.IGNORECASE
+            ):
                 sql_errors.append({
                     "type": "missing_select",
-                    "message": "SQL code should contain a SELECT statement"
+                    "message": (
+                        "SQL code should contain"
+                        " a SELECT statement"
+                    )
                 })
-            
+
             # Check for balanced parentheses
             if code.count('(') != code.count(')'):
                 sql_errors.append({
                     "type": "unbalanced_parentheses",
-                    "message": "Unbalanced parentheses in SQL code"
+                    "message": (
+                        "Unbalanced parentheses"
+                        " in SQL code"
+                    )
                 })
-            
+
             # Check for unterminated strings
-            single_quotes = code.count("'") - code.count("\\'")
-            double_quotes = code.count('"') - code.count('\\"')
-            
+            single_quotes = (
+                code.count("'") - code.count("\\'")
+            )
+            double_quotes = (
+                code.count('"') - code.count('\\"')
+            )
+
             if single_quotes % 2 != 0:
                 sql_errors.append({
                     "type": "unterminated_string",
-                    "message": "Unterminated single-quoted string"
+                    "message": (
+                        "Unterminated single-quoted"
+                        " string"
+                    )
                 })
-            
+
             if double_quotes % 2 != 0:
                 sql_errors.append({
                     "type": "unterminated_string",
-                    "message": "Unterminated double-quoted string"
+                    "message": (
+                        "Unterminated double-quoted"
+                        " string"
+                    )
                 })
-            
+
             errors.extend(sql_errors)
-            validation_results["sql_basic_valid"] = len(sql_errors) == 0
-            
+            validation_results[
+                "sql_basic_valid"
+            ] = len(sql_errors) == 0
+
         elif recipe_type == "r":
             # R syntax validation (basic)
             r_errors = []
-            
-            # Check for balanced parentheses and brackets
+
+            # Check for balanced parentheses
+            # and brackets
             if code.count('(') != code.count(')'):
                 r_errors.append({
-                    "type": "unbalanced_parentheses",
-                    "message": "Unbalanced parentheses in R code"
+                    "type":
+                        "unbalanced_parentheses",
+                    "message": (
+                        "Unbalanced parentheses"
+                        " in R code"
+                    )
                 })
-            
+
             if code.count('[') != code.count(']'):
                 r_errors.append({
-                    "type": "unbalanced_brackets",
-                    "message": "Unbalanced brackets in R code"
+                    "type":
+                        "unbalanced_brackets",
+                    "message": (
+                        "Unbalanced brackets"
+                        " in R code"
+                    )
                 })
-            
+
             if code.count('{') != code.count('}'):
                 r_errors.append({
                     "type": "unbalanced_braces",
-                    "message": "Unbalanced braces in R code"
+                    "message": (
+                        "Unbalanced braces"
+                        " in R code"
+                    )
                 })
-            
+
             errors.extend(r_errors)
-            validation_results["r_basic_valid"] = len(r_errors) == 0
-            
+            validation_results[
+                "r_basic_valid"
+            ] = len(r_errors) == 0
+
         else:
-            # For other recipe types, just check if it's valid JSON (for visual recipes)
+            # For other recipe types, just check if
+            # it's valid JSON (for visual recipes)
             try:
                 json.loads(code)
-                validation_results["json_valid"] = True
-            except json.JSONDecodeError as e:
-                validation_results["json_valid"] = False
-                # This might not be JSON, which is fine for some recipe types
-        
+                validation_results[
+                    "json_valid"
+                ] = True
+            except json.JSONDecodeError:
+                validation_results[
+                    "json_valid"
+                ] = False
+                # This might not be JSON, which is
+                # fine for some recipe types
+
         # Overall validation result
         is_valid = len(errors) == 0
-        
+
         return {
             "status": "ok",
             "valid": is_valid,
@@ -300,11 +419,14 @@ def validate_recipe_syntax(
             "error_count": len(errors),
             "warning_count": len(warnings)
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Failed to validate recipe syntax: {str(e)}"
+            "message": (
+                "Failed to validate recipe "
+                f"syntax: {str(e)}"
+            )
         }
 
 
@@ -312,15 +434,15 @@ def test_recipe_dry_run(
     project_key: str,
     recipe_name: str,
     sample_rows: int = 100
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Test recipe logic without actual execution.
-    
+
     Args:
         project_key: The project key
         recipe_name: Name of the recipe
-        sample_rows: Number of sample rows to test with
-        
+        sample_rows: Number of sample rows to test
+
     Returns:
         Dict containing test results
     """
@@ -328,25 +450,40 @@ def test_recipe_dry_run(
         project = get_project(project_key)
         recipe = project.get_recipe(recipe_name)
         settings = recipe.get_settings()
-        
+
         # Get recipe information
         try:
             recipe_def = recipe.get_definition()
-            inputs = [inp["ref"] for inp in recipe_def["inputs"]]
-            outputs = [out["ref"] for out in recipe_def["outputs"]]
-            recipe_type = recipe_def.get("type", "unknown")
+            inputs = [
+                inp["ref"]
+                for inp in recipe_def["inputs"]
+            ]
+            outputs = [
+                out["ref"]
+                for out in recipe_def["outputs"]
+            ]
+            recipe_type = recipe_def.get(
+                "type", "unknown"
+            )
         except AttributeError:
             # Fallback for older API versions
             try:
-                recipe_def_payload = recipe.get_definition_and_payload()
-                payload = recipe_def_payload.get_payload()
+                recipe_def_payload = (
+                    recipe
+                    .get_definition_and_payload()
+                )
+                payload = (
+                    recipe_def_payload.get_payload()
+                )
                 if isinstance(payload, dict):
-                    recipe_type = payload.get("type", "unknown")
+                    recipe_type = payload.get(
+                        "type", "unknown"
+                    )
                 else:
                     recipe_type = "unknown"
                 inputs = []
                 outputs = []
-            except:
+            except Exception:
                 recipe_type = "unknown"
                 inputs = []
                 outputs = []
@@ -357,139 +494,260 @@ def test_recipe_dry_run(
             "outputs": outputs,
             "sample_rows": sample_rows
         }
-        
+
         # Check if inputs exist and are accessible
         input_checks = []
         for input_name in inputs:
             try:
-                input_dataset = project.get_dataset(input_name)
+                input_dataset = project.get_dataset(
+                    input_name
+                )
                 schema = input_dataset.get_schema()
-                
+
                 # Try to get sample data
                 try:
-                    sample_df = input_dataset.get_dataframe(limit=sample_rows)
+                    sample_df = (
+                        input_dataset.get_dataframe(
+                            limit=sample_rows
+                        )
+                    )
+                    sample_cols = (
+                        list(sample_df.columns)
+                        if hasattr(
+                            sample_df, 'columns'
+                        )
+                        else []
+                    )
                     input_info = {
                         "name": input_name,
                         "status": "ok",
-                        "schema_columns": len(schema["columns"]),
-                        "sample_rows": len(sample_df),
-                        "sample_columns": list(sample_df.columns) if hasattr(sample_df, 'columns') else []
+                        "schema_columns": len(
+                            schema["columns"]
+                        ),
+                        "sample_rows": len(
+                            sample_df
+                        ),
+                        "sample_columns":
+                            sample_cols
                     }
                 except Exception as e:
+                    schema_cols = (
+                        len(schema["columns"])
+                        if schema
+                        else 0
+                    )
                     input_info = {
                         "name": input_name,
                         "status": "warning",
-                        "message": f"Could not read sample data: {str(e)}",
-                        "schema_columns": len(schema["columns"]) if schema else 0
+                        "message": (
+                            "Could not read sample"
+                            f" data: {str(e)}"
+                        ),
+                        "schema_columns":
+                            schema_cols
                     }
-                
+
                 input_checks.append(input_info)
-                
+
             except Exception as e:
                 input_checks.append({
                     "name": input_name,
                     "status": "error",
-                    "message": f"Input dataset not accessible: {str(e)}"
+                    "message": (
+                        "Input dataset not "
+                        f"accessible: {str(e)}"
+                    )
                 })
-        
-        test_results["input_checks"] = input_checks
-        
+
+        test_results["input_checks"] = (
+            input_checks
+        )
+
         # Check if outputs are properly configured
         output_checks = []
         for output_name in outputs:
             try:
-                output_dataset = project.get_dataset(output_name)
+                output_dataset = (
+                    project.get_dataset(output_name)
+                )
+                raw = (
+                    output_dataset
+                    .get_settings()
+                    .get_raw()
+                )
                 output_info = {
                     "name": output_name,
                     "status": "ok",
                     "exists": True,
-                    "type": output_dataset.get_settings().get_raw()["type"]
+                    "type": raw["type"]
                 }
             except Exception as e:
                 output_info = {
                     "name": output_name,
                     "status": "warning",
                     "exists": False,
-                    "message": f"Output dataset will be created: {str(e)}"
+                    "message": (
+                        "Output dataset will be "
+                        f"created: {str(e)}"
+                    )
                 }
-            
+
             output_checks.append(output_info)
-        
-        test_results["output_checks"] = output_checks
-        
-        # For Python recipes, try to validate the code structure
+
+        test_results["output_checks"] = (
+            output_checks
+        )
+
+        # For Python recipes, try to validate
+        # the code structure
         if recipe_type in ["python", "pyspark"]:
             try:
                 code = settings.get_code()
-                
-                # Parse the code to check for basic structure
+
+                # Parse the code to check for
+                # basic structure
                 tree = ast.parse(code)
-                
+
                 # Check for dataiku imports
                 has_dataiku_import = False
                 for node in ast.walk(tree):
-                    if isinstance(node, ast.Import):
+                    if isinstance(
+                        node, ast.Import
+                    ):
                         for alias in node.names:
-                            if alias.name == "dataiku":
-                                has_dataiku_import = True
-                    elif isinstance(node, ast.ImportFrom):
-                        if node.module == "dataiku":
-                            has_dataiku_import = True
-                
+                            if (
+                                alias.name
+                                == "dataiku"
+                            ):
+                                has_dataiku_import = (
+                                    True
+                                )
+                    elif isinstance(
+                        node, ast.ImportFrom
+                    ):
+                        if (
+                            node.module
+                            == "dataiku"
+                        ):
+                            has_dataiku_import = (
+                                True
+                            )
+
                 # Check for dataset operations
-                has_input_read = "get_dataframe" in code or "iter_rows" in code
-                has_output_write = "write_with_schema" in code or "write_dataframe" in code
-                
+                has_input_read = (
+                    "get_dataframe" in code
+                    or "iter_rows" in code
+                )
+                has_output_write = (
+                    "write_with_schema" in code
+                    or "write_dataframe" in code
+                )
+
                 code_analysis = {
-                    "has_dataiku_import": has_dataiku_import,
-                    "has_input_read": has_input_read,
-                    "has_output_write": has_output_write,
-                    "line_count": len(code.split('\n')),
+                    "has_dataiku_import":
+                        has_dataiku_import,
+                    "has_input_read":
+                        has_input_read,
+                    "has_output_write":
+                        has_output_write,
+                    "line_count": len(
+                        code.split('\n')
+                    ),
                     "ast_valid": True
                 }
-                
-                test_results["code_analysis"] = code_analysis
-                
+
+                test_results[
+                    "code_analysis"
+                ] = code_analysis
+
             except Exception as e:
                 test_results["code_analysis"] = {
                     "ast_valid": False,
                     "error": str(e)
                 }
-        
+
         # Generate test summary
-        input_errors = sum(1 for check in input_checks if check["status"] == "error")
-        output_errors = sum(1 for check in output_checks if check["status"] == "error")
-        
+        input_errors = sum(
+            1 for check in input_checks
+            if check["status"] == "error"
+        )
+        output_errors = sum(
+            1 for check in output_checks
+            if check["status"] == "error"
+        )
+
+        no_errors = (
+            input_errors == 0
+            and output_errors == 0
+        )
         test_summary = {
-            "overall_status": "ok" if input_errors == 0 and output_errors == 0 else "warning",
+            "overall_status": (
+                "ok" if no_errors
+                else "warning"
+            ),
             "input_errors": input_errors,
             "output_errors": output_errors,
-            "ready_for_execution": input_errors == 0,
+            "ready_for_execution": (
+                input_errors == 0
+            ),
             "recommendations": []
         }
-        
+
         # Add recommendations
         if input_errors > 0:
-            test_summary["recommendations"].append("Fix input dataset access issues before running")
-        
+            test_summary[
+                "recommendations"
+            ].append(
+                "Fix input dataset access "
+                "issues before running"
+            )
+
         if recipe_type in ["python", "pyspark"]:
-            code_analysis = test_results.get("code_analysis", {})
-            if not code_analysis.get("has_dataiku_import", False):
-                test_summary["recommendations"].append("Add 'import dataiku' to your code")
-            if not code_analysis.get("has_input_read", False):
-                test_summary["recommendations"].append("Add code to read input datasets")
-            if not code_analysis.get("has_output_write", False):
-                test_summary["recommendations"].append("Add code to write output datasets")
-        
-        test_results["test_summary"] = test_summary
-        
+            code_analysis = test_results.get(
+                "code_analysis", {}
+            )
+            if not code_analysis.get(
+                "has_dataiku_import", False
+            ):
+                test_summary[
+                    "recommendations"
+                ].append(
+                    "Add 'import dataiku'"
+                    " to your code"
+                )
+            if not code_analysis.get(
+                "has_input_read", False
+            ):
+                test_summary[
+                    "recommendations"
+                ].append(
+                    "Add code to read"
+                    " input datasets"
+                )
+            if not code_analysis.get(
+                "has_output_write", False
+            ):
+                test_summary[
+                    "recommendations"
+                ].append(
+                    "Add code to write"
+                    " output datasets"
+                )
+
+        test_results["test_summary"] = (
+            test_summary
+        )
+
         return {
             "status": "ok",
             "test_results": test_results
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Failed to perform dry run test: {str(e)}"
+            "message": (
+                "Failed to perform dry run "
+                f"test: {str(e)}"
+            )
         }
