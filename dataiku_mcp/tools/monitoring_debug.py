@@ -231,82 +231,31 @@ def get_job_details(
         Dict containing detailed job information
     """
     try:
-        client = get_client()
-        get_project(project_key)
+        project = get_project(project_key)
 
         # Get job details
-        job = client.get_job(job_id)
+        job = project.get_job(job_id)
 
-        # Extract basic job information
+        # Get job status (primary source of info)
+        job_status = job.get_status()
         job_info = {
             "job_id": job_id,
-            "job_name": getattr(
-                job, 'job_name', f"Job {job_id}"
+            "state": job_status.get(
+                "baseStatus", {}
+            ).get("state", "unknown"),
+            "start_time": job_status.get(
+                "baseStatus", {}
+            ).get("startTime", None),
+            "end_time": job_status.get(
+                "baseStatus", {}
+            ).get("endTime", None),
+            "initiator": job_status.get(
+                "baseStatus", {}
+            ).get("initiator", "unknown"),
+            "warning": job_status.get(
+                "hasWarning", False
             ),
-            "state": job.state,
-            "start_time": getattr(
-                job, 'start_time', None
-            ),
-            "end_time": getattr(
-                job, 'end_time', None
-            ),
-            "duration": getattr(
-                job, 'duration', None
-            ),
-            "initiator": getattr(
-                job, 'initiator', 'unknown'
-            ),
-            "type": getattr(
-                job, 'type', 'unknown'
-            )
         }
-
-        # Get detailed job definition
-        try:
-            job_def = job.get_definition()
-            job_info["definition"] = {
-                "type": job_def.get(
-                    "type", "unknown"
-                ),
-                "projectKey": job_def.get(
-                    "projectKey", project_key
-                ),
-                "params": job_def.get(
-                    "params", {}
-                )
-            }
-        except Exception as e:
-            job_info["definition"] = {
-                "error": (
-                    "Could not get definition: "
-                    f"{str(e)}"
-                )
-            }
-
-        # Get job status
-        try:
-            job_status = job.get_status()
-            job_info["status"] = {
-                "state": job_status.get(
-                    "state", "unknown"
-                ),
-                "progress": job_status.get(
-                    "progress", 0
-                ),
-                "warning": job_status.get(
-                    "hasWarning", False
-                ),
-                "messages": job_status.get(
-                    "messages", []
-                )
-            }
-        except Exception as e:
-            job_info["status"] = {
-                "error": (
-                    "Could not get status: "
-                    f"{str(e)}"
-                )
-            }
 
         # Get job log
         logs = []
