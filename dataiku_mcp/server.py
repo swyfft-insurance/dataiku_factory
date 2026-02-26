@@ -30,8 +30,8 @@ mcp = FastMCP("Dataiku DSS MCP Server")
 
 # Server description
 mcp.description = """
-A Model Context Protocol server for Dataiku DSS integration.
-Provides tools for managing recipes, datasets, and scenarios.
+MCP server for Dataiku DSS. Manages recipes, datasets, scenarios, and
+project flows. Project keys are uppercase identifiers (e.g. 'DATAWAREHOUSE').
 """
 
 
@@ -49,15 +49,17 @@ def create_recipe(
     Create a new recipe in a Dataiku project.
 
     Args:
-        project_key: The project key
-        recipe_type: Type of recipe
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        recipe_type: Recipe type ('sql', 'python',
+            'sync', 'join', 'group')
         recipe_name: Name for the new recipe
         inputs: List of input dataset names
         outputs: List of output dataset configs
-        code: Optional code for the recipe
+            [{"name": "...", "appendMode": false}]
+        code: Optional SQL or Python code for the recipe
 
     Returns:
-        Dict containing recipe creation result
+        Dict with recipe creation status and name
     """
     return recipes.create_recipe(
         project_key, recipe_type, recipe_name,
@@ -71,15 +73,15 @@ def update_recipe(
     **kwargs: Any
 ) -> dict[str, Any]:
     """
-    Update an existing recipe.
+    Update an existing recipe's settings or code.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         recipe_name: Name of the recipe to update
-        **kwargs: Recipe settings to update
+        **kwargs: Recipe settings to update (e.g. code, inputs, outputs)
 
     Returns:
-        Dict containing update result
+        Dict with update status
     """
     return recipes.update_recipe(
         project_key, recipe_name, **kwargs
@@ -94,11 +96,11 @@ def delete_recipe(
     Delete a recipe from a project.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         recipe_name: Name of the recipe to delete
 
     Returns:
-        Dict containing deletion result
+        Dict with deletion status
     """
     return recipes.delete_recipe(
         project_key, recipe_name
@@ -111,15 +113,16 @@ def run_recipe(
     build_mode: str | None = None
 ) -> dict[str, Any]:
     """
-    Run a recipe to build its outputs.
+    Run a recipe to build its output datasets.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         recipe_name: Name of the recipe to run
-        build_mode: Optional build mode
+        build_mode: Build mode ('RECURSIVE_BUILD',
+            'NON_RECURSIVE_FORCED_BUILD', etc.)
 
     Returns:
-        Dict containing run result
+        Dict with job ID and run status
     """
     return recipes.run_recipe(
         project_key, recipe_name, build_mode
@@ -137,13 +140,13 @@ def create_dataset(
     Create a new dataset in a project.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name for the new dataset
-        dataset_type: Type of dataset
-        params: Dataset configuration parameters
+        dataset_type: Type of dataset (e.g. 'SQL', 'Filesystem', 'S3')
+        params: Dataset configuration (connection, table, path, etc.)
 
     Returns:
-        Dict containing dataset creation result
+        Dict with creation status and dataset name
     """
     return datasets.create_dataset(
         project_key, dataset_name,
@@ -160,12 +163,12 @@ def update_dataset(
     Update dataset settings.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset to update
-        **kwargs: Dataset settings to update
+        **kwargs: Dataset settings to update (connection, schema, params, etc.)
 
     Returns:
-        Dict containing update result
+        Dict with update status
     """
     return datasets.update_dataset(
         project_key, dataset_name, **kwargs
@@ -181,12 +184,12 @@ def delete_dataset(
     Delete a dataset from a project.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset to delete
-        drop_data: Whether to drop underlying data
+        drop_data: Whether to also drop the underlying SQL table or files
 
     Returns:
-        Dict containing deletion result
+        Dict with deletion status
     """
     return datasets.delete_dataset(
         project_key, dataset_name, drop_data
@@ -200,16 +203,17 @@ def build_dataset(
     partition: str | None = None
 ) -> dict[str, Any]:
     """
-    Build a dataset.
+    Build a dataset by running its upstream recipe.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset to build
-        mode: Optional build mode
-        partition: Optional partition specification
+        mode: Build mode ('RECURSIVE_BUILD',
+            'NON_RECURSIVE_FORCED_BUILD', etc.)
+        partition: Partition spec for partitioned datasets
 
     Returns:
-        Dict containing build result
+        Dict with job ID and build status
     """
     return datasets.build_dataset(
         project_key, dataset_name, mode, partition
@@ -221,14 +225,14 @@ def inspect_dataset_schema(
     dataset_name: str
 ) -> dict[str, Any]:
     """
-    Get dataset schema information.
+    Get column names, types, and meanings for a dataset.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset
 
     Returns:
-        Dict containing schema information
+        Dict with columns list (name, type, meaning) and total column count
     """
     return datasets.inspect_dataset_schema(
         project_key, dataset_name
@@ -240,14 +244,14 @@ def check_dataset_metrics(
     dataset_name: str
 ) -> dict[str, Any]:
     """
-    Get latest dataset metrics.
+    Get latest computed metrics for a dataset (row count, file size, etc.).
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset
 
     Returns:
-        Dict containing metrics data
+        Dict with metric values and last compute timestamp
     """
     return datasets.check_dataset_metrics(
         project_key, dataset_name
@@ -259,18 +263,18 @@ def get_dataset_post_write_statements(
     dataset_name: str
 ) -> dict[str, Any]:
     """
-    Get post-write statements for a dataset.
+    Get post-write SQL statements for a dataset.
 
-    Post-write statements are SQL that executes
-    AFTER a recipe writes data but BEFORE downstream
-    recipes read it.
+    Post-write statements execute AFTER a recipe writes data but BEFORE
+    downstream recipes read it. Often contains index creation, column adds,
+    or business logic transforms not visible in recipe code.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         dataset_name: Name of the dataset
 
     Returns:
-        Dict containing post-write statements
+        Dict with SQL statements list and dataset info
     """
     return datasets.get_dataset_post_write_statements(
         project_key, dataset_name
@@ -285,16 +289,16 @@ def create_scenario(
     definition: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """
-    Create a new scenario in a project.
+    Create a new scenario (workflow automation) in a project.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         scenario_name: Name for the new scenario
-        scenario_type: Type of scenario
-        definition: Optional scenario definition
+        scenario_type: Type of scenario ('step_based' or 'custom_python')
+        definition: Optional scenario definition with steps and settings
 
     Returns:
-        Dict containing scenario creation result
+        Dict with scenario ID and creation status
     """
     return scenarios.create_scenario(
         project_key, scenario_name,
@@ -311,12 +315,12 @@ def update_scenario(
     Update scenario settings.
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario to update
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier (e.g. 'REBUILD_DW')
         **kwargs: Scenario settings to update
 
     Returns:
-        Dict containing update result
+        Dict with update status
     """
     return scenarios.update_scenario(
         project_key, scenario_id, **kwargs
@@ -331,11 +335,11 @@ def delete_scenario(
     Delete a scenario from a project.
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario to delete
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier to delete
 
     Returns:
-        Dict containing deletion result
+        Dict with deletion status
     """
     return scenarios.delete_scenario(
         project_key, scenario_id
@@ -349,16 +353,17 @@ def add_scenario_trigger(
     **params: Any
 ) -> dict[str, Any]:
     """
-    Add a trigger to a scenario.
+    Add a trigger to a scenario (time-based, dataset change, etc.).
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario
-        trigger_type: Type of trigger to add
-        **params: Trigger parameters
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier
+        trigger_type: Trigger type ('temporal',
+            'dataset_modified', 'sql_query', etc.)
+        **params: Trigger-specific parameters (cron, dataset name, etc.)
 
     Returns:
-        Dict containing trigger addition result
+        Dict with trigger addition status
     """
     return scenarios.add_scenario_trigger(
         project_key, scenario_id,
@@ -372,15 +377,15 @@ def remove_scenario_trigger(
     trigger_idx: int
 ) -> dict[str, Any]:
     """
-    Remove a trigger from a scenario.
+    Remove a trigger from a scenario by index.
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario
-        trigger_idx: Index of the trigger to remove
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier
+        trigger_idx: Zero-based index of the trigger to remove
 
     Returns:
-        Dict containing trigger removal result
+        Dict with trigger removal status
     """
     return scenarios.remove_scenario_trigger(
         project_key, scenario_id, trigger_idx
@@ -392,14 +397,14 @@ def run_scenario(
     scenario_id: str
 ) -> dict[str, Any]:
     """
-    Run a scenario manually.
+    Run a scenario manually (triggers all steps in sequence).
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario to run
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier to run
 
     Returns:
-        Dict containing run result
+        Dict with run ID and initial status
     """
     return scenarios.run_scenario(
         project_key, scenario_id
@@ -411,14 +416,14 @@ def get_scenario_info(
     scenario_id: str
 ) -> dict[str, Any]:
     """
-    Get scenario information.
+    Get scenario metadata, triggers, and last run status.
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier
 
     Returns:
-        Dict containing scenario info with triggers
+        Dict with scenario name, type, triggers list, and last run info
     """
     return scenarios.get_scenario_info(
         project_key, scenario_id
@@ -429,13 +434,13 @@ def list_scenarios(
     project_key: str
 ) -> dict[str, Any]:
     """
-    List all scenarios in a project.
+    List all scenarios in a project with their IDs and last run status.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
 
     Returns:
-        Dict containing list of scenarios
+        Dict with scenarios list (id, name, type, last run status)
     """
     return scenarios.list_scenarios(project_key)
 
@@ -447,15 +452,15 @@ def get_scenario_logs(
     run_id: str | None = None
 ) -> dict[str, Any]:
     """
-    Get detailed run logs for failed scenarios.
+    Get detailed run logs for a scenario (useful for debugging failures).
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario
-        run_id: Specific run ID (defaults to latest)
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier
+        run_id: Specific run ID (defaults to most recent run)
 
     Returns:
-        Dict containing logs and run information
+        Dict with log text, step outcomes, run status, and timing
     """
     return advanced_scenarios.get_scenario_logs(
         project_key, scenario_id, run_id
@@ -467,14 +472,14 @@ def get_scenario_steps(
     scenario_id: str
 ) -> dict[str, Any]:
     """
-    Get detailed step configuration.
+    Get the ordered list of steps in a scenario with their configurations.
 
     Args:
-        project_key: The project key
-        scenario_id: ID of the scenario
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        scenario_id: Scenario identifier
 
     Returns:
-        Dict containing step configurations
+        Dict with steps list (type, name, params, condition) in execution order
     """
     return advanced_scenarios.get_scenario_steps(
         project_key, scenario_id
@@ -488,16 +493,16 @@ def clone_scenario(
     modifications: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """
-    Clone an existing scenario with modifications.
+    Clone an existing scenario with optional modifications to steps/triggers.
 
     Args:
-        project_key: The project key
-        source_scenario_id: Source scenario ID
-        new_scenario_name: Name for new scenario
-        modifications: Optional modifications
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        source_scenario_id: Source scenario ID to clone from
+        new_scenario_name: Name for the cloned scenario
+        modifications: Optional dict of settings to override in the clone
 
     Returns:
-        Dict containing cloned scenario information
+        Dict with new scenario ID and clone status
     """
     return advanced_scenarios.clone_scenario(
         project_key, source_scenario_id,
@@ -511,14 +516,14 @@ def get_recipe_code(
     recipe_name: str
 ) -> dict[str, Any]:
     """
-    Extract actual Python/SQL code from recipes.
+    Extract the Python or SQL source code from a recipe.
 
     Args:
-        project_key: The project key
-        recipe_name: Name of the recipe
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        recipe_name: Name of the recipe (e.g. 'compute_DimPolicy')
 
     Returns:
-        Dict containing code and recipe information
+        Dict with code string, recipe type, inputs/outputs, and language
     """
     return code_development.get_recipe_code(
         project_key, recipe_name
@@ -531,15 +536,15 @@ def validate_recipe_syntax(
     code: str | None = None
 ) -> dict[str, Any]:
     """
-    Validate Python/SQL syntax before execution.
+    Validate Python/SQL syntax without executing the recipe.
 
     Args:
-        project_key: The project key
-        recipe_name: Name of the recipe
-        code: Optional code to validate
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        recipe_name: Name of the recipe to validate
+        code: Code to validate (uses recipe's current code if omitted)
 
     Returns:
-        Dict containing validation results
+        Dict with valid (bool), errors list, and warnings list
     """
     return code_development.validate_recipe_syntax(
         project_key, recipe_name, code
@@ -552,15 +557,15 @@ def test_recipe_dry_run(
     sample_rows: int = 100
 ) -> dict[str, Any]:
     """
-    Test recipe logic without actual execution.
+    Test recipe logic on a sample without writing to the output dataset.
 
     Args:
-        project_key: The project key
-        recipe_name: Name of the recipe
-        sample_rows: Number of sample rows
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        recipe_name: Name of the recipe to test
+        sample_rows: Number of input rows to sample (default 100)
 
     Returns:
-        Dict containing test results
+        Dict with sample output rows, schema, and any errors
     """
     return code_development.test_recipe_dry_run(
         project_key, recipe_name, sample_rows
@@ -572,13 +577,15 @@ def get_project_flow(
     project_key: str
 ) -> dict[str, Any]:
     """
-    Get complete data flow/pipeline structure.
+    Get the complete data pipeline DAG for a project.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase
+            (e.g. 'DATAWAREHOUSE')
 
     Returns:
-        Dict with flow structure and dependencies
+        Dict with datasets, recipes, and edges
+        (input->recipe->output connections)
     """
     return project_exploration.get_project_flow(
         project_key
@@ -591,15 +598,18 @@ def search_project_objects(
     object_types: list[str] | None = None
 ) -> dict[str, Any]:
     """
-    Search for datasets, recipes, scenarios.
+    Search for datasets, recipes, or scenarios by name pattern.
 
     Args:
-        project_key: The project key
-        search_term: Search pattern
-        object_types: List of object types to search
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        search_term: Search pattern (substring match,
+            e.g. 'DimPolicy', 'premium')
+        object_types: Filter to specific types
+            (['DATASET', 'RECIPE', 'SCENARIO']).
+            All if omitted.
 
     Returns:
-        Dict containing search results
+        Dict with matching objects grouped by type, each with name and metadata
     """
     return project_exploration.search_project_objects(
         project_key, search_term, object_types
@@ -613,16 +623,16 @@ def get_dataset_sample(
     columns: list[str] | None = None
 ) -> dict[str, Any]:
     """
-    Get sample data from datasets.
+    Get sample rows from a dataset for inspection.
 
     Args:
-        project_key: The project key
-        dataset_name: Name of the dataset
-        rows: Number of sample rows
-        columns: Specific columns to include
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        dataset_name: Name of the dataset to sample
+        rows: Number of rows to return (default 100)
+        columns: Specific column names to include (all columns if omitted)
 
     Returns:
-        Dict containing sample data and schema
+        Dict with column headers, row data, total row count, and schema
     """
     return project_exploration.get_dataset_sample(
         project_key, dataset_name, rows, columns
@@ -634,13 +644,14 @@ def get_code_environments(
     project_key: str | None = None
 ) -> dict[str, Any]:
     """
-    List available Python/R environments.
+    List available Python/R code environments and their installed packages.
 
     Args:
-        project_key: Project identifier (optional)
+        project_key: Dataiku project key to filter by
+            (all environments if omitted)
 
     Returns:
-        Dict containing code environments info
+        Dict with environments list (name, language, version, packages)
     """
     return environment_config.get_code_environments(
         project_key
@@ -651,13 +662,13 @@ def get_project_variables(
     project_key: str
 ) -> dict[str, Any]:
     """
-    Get project-level variables and configuration.
+    Get project-level variables (used in recipes, scenarios, and SQL as ${var}).
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
 
     Returns:
-        Dict containing project variables
+        Dict with standard and local variable key-value pairs
     """
     return environment_config.get_project_variables(
         project_key
@@ -668,13 +679,14 @@ def get_connections(
     project_key: str | None = None
 ) -> dict[str, Any]:
     """
-    List available data connections.
+    List available data connections (SQL databases, file stores, cloud storage).
 
     Args:
-        project_key: Project identifier (optional)
+        project_key: Dataiku project key to filter by
+            (all connections if omitted)
 
     Returns:
-        Dict containing connection information
+        Dict with connections list (name, type, database/host, credentials info)
     """
     return environment_config.get_connections(
         project_key
@@ -688,15 +700,15 @@ def get_recent_runs(
     status_filter: str | None = None
 ) -> dict[str, Any]:
     """
-    Get recent run history across scenarios/recipes.
+    Get recent job/scenario run history with status and timing.
 
     Args:
-        project_key: The project key
-        limit: Number of recent runs to retrieve
-        status_filter: Filter by status
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        limit: Max number of runs to return (default 50)
+        status_filter: Filter by status ('DONE', 'FAILED', 'RUNNING', etc.)
 
     Returns:
-        Dict containing recent runs and summary
+        Dict with runs list (id, type, status, start/end time, initiator)
     """
     return monitoring_debug.get_recent_runs(
         project_key, limit, status_filter
@@ -708,14 +720,15 @@ def get_job_details(
     job_id: str
 ) -> dict[str, Any]:
     """
-    Get detailed job execution information.
+    Get detailed execution info for a specific job (timing, logs, outputs).
 
     Args:
-        project_key: The project key
-        job_id: Job identifier
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        job_id: Job identifier (from run_recipe,
+            build_dataset, or get_recent_runs)
 
     Returns:
-        Dict containing detailed job information
+        Dict with job status, activities, logs, start/end time, and outputs
     """
     return monitoring_debug.get_job_details(
         project_key, job_id
@@ -727,14 +740,14 @@ def cancel_running_jobs(
     job_ids: list[str]
 ) -> dict[str, Any]:
     """
-    Cancel running jobs/scenarios.
+    Cancel one or more running jobs.
 
     Args:
-        project_key: The project key
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
         job_ids: List of job IDs to cancel
 
     Returns:
-        Dict containing cancellation results
+        Dict with per-job cancellation status (success/failure)
     """
     return monitoring_debug.cancel_running_jobs(
         project_key, job_ids
@@ -748,15 +761,16 @@ def duplicate_project_structure(
     include_data: bool = False
 ) -> dict[str, Any]:
     """
-    Copy project structure to new project.
+    Copy project structure (recipes, datasets, scenarios) to another project.
 
     Args:
-        source_project_key: Source project ID
-        target_project_key: Target project ID
-        include_data: Whether to copy data
+        source_project_key: Source project key, uppercase (e.g. 'DATAWAREHOUSE')
+        target_project_key: Target project key, uppercase
+        include_data: Whether to also copy dataset
+            contents (default: structure only)
 
     Returns:
-        Dict containing duplication results
+        Dict with copied object counts and any errors
     """
     return productivity.duplicate_project_structure(
         source_project_key,
@@ -770,14 +784,14 @@ def export_project_config(
     format: str = "json"
 ) -> dict[str, Any]:
     """
-    Export project configuration as JSON/YAML.
+    Export full project configuration (datasets, recipes, scenarios, variables).
 
     Args:
-        project_key: The project key
-        format: Export format (json/yaml)
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        format: Export format ('json' or 'yaml')
 
     Returns:
-        Dict containing exported configuration
+        Dict with complete project configuration in the requested format
     """
     return productivity.export_project_config(
         project_key, format
@@ -791,16 +805,16 @@ def batch_update_objects(
     updates: dict[str, Any]
 ) -> dict[str, Any]:
     """
-    Update multiple objects with similar changes.
+    Apply the same update to multiple objects matching a name pattern.
 
     Args:
-        project_key: The project key
-        object_type: Type of objects to update
-        pattern: Pattern to match objects
-        updates: Updates to apply
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        object_type: Type of objects ('DATASET', 'RECIPE', 'SCENARIO')
+        pattern: Name pattern to match (substring match)
+        updates: Dict of settings to apply to all matched objects
 
     Returns:
-        Dict containing update results
+        Dict with matched count, updated count, and per-object status
     """
     return productivity.batch_update_objects(
         project_key, object_type, pattern, updates
