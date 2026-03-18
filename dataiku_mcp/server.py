@@ -10,15 +10,20 @@ from mcp.server.fastmcp import FastMCP
 
 from dataiku_mcp.client import get_project, list_projects
 from dataiku_mcp.tools import (
+    administration,
     advanced_scenarios,
     code_development,
+    data_quality,
     datasets,
+    deployment,
     environment_config,
+    managed_folders,
     monitoring_debug,
     productivity,
     project_exploration,
     recipes,
     scenarios,
+    sql_execution,
 )
 
 # Configure logging
@@ -984,6 +989,255 @@ def get_project_info(project_key: str) -> str:
         return json.dumps(project_info)
     except Exception as e:
         return json.dumps({"error": str(e)})
+
+@mcp.tool()
+def set_project_variables(
+    project_key: str,
+    standard: dict[str, Any] | None = None,
+    local: dict[str, Any] | None = None,
+    merge: bool = True
+) -> dict[str, Any]:
+    """
+    Set project-level variables.
+
+    Args:
+        project_key: The project key
+        standard: Dict of standard (global) variables to set
+        local: Dict of local (custom) variables to set
+        merge: If True, merge with existing. If False, replace entirely.
+
+    Returns:
+        Dict containing update result
+    """
+    return environment_config.set_project_variables(project_key, standard, local, merge)
+
+# Register Managed Folder Tools
+@mcp.tool()
+def list_managed_folders(project_key: str) -> dict[str, Any]:
+    """
+    List all managed folders in a project.
+
+    Args:
+        project_key: The project key
+
+    Returns:
+        Dict containing list of managed folders
+    """
+    return managed_folders.list_managed_folders(project_key)
+
+@mcp.tool()
+def get_managed_folder_contents(project_key: str, folder_id: str, path: str = "/") -> dict[str, Any]:
+    """
+    List files and subdirectories in a managed folder.
+
+    Args:
+        project_key: The project key
+        folder_id: ID of the managed folder
+        path: Path within the folder (default "/")
+
+    Returns:
+        Dict containing file listing
+    """
+    return managed_folders.get_managed_folder_contents(project_key, folder_id, path)
+
+@mcp.tool()
+def get_managed_folder_info(project_key: str, folder_id: str) -> dict[str, Any]:
+    """
+    Get settings and metadata for a managed folder.
+
+    Args:
+        project_key: The project key
+        folder_id: ID of the managed folder
+
+    Returns:
+        Dict containing folder settings
+    """
+    return managed_folders.get_managed_folder_info(project_key, folder_id)
+
+@mcp.tool()
+def upload_file_to_folder(project_key: str, folder_id: str, path: str, content: str, is_base64: bool = False) -> dict[str, Any]:
+    """
+    Upload content to a file in a managed folder.
+
+    Args:
+        project_key: The project key
+        folder_id: ID of the managed folder
+        path: Target file path within the folder
+        content: File content as text, or base64-encoded for binary
+        is_base64: If True, content is base64-encoded binary data
+
+    Returns:
+        Dict containing upload result
+    """
+    return managed_folders.upload_file_to_folder(project_key, folder_id, path, content, is_base64)
+
+@mcp.tool()
+def download_file_from_folder(project_key: str, folder_id: str, path: str, max_size_bytes: int = 1048576) -> dict[str, Any]:
+    """
+    Download a file from a managed folder.
+
+    Returns content as text if UTF-8 decodable, otherwise as base64.
+    Default max size is 1MB.
+
+    Args:
+        project_key: The project key
+        folder_id: ID of the managed folder
+        path: File path within the folder
+        max_size_bytes: Maximum file size to download (default 1MB)
+
+    Returns:
+        Dict containing file content
+    """
+    return managed_folders.download_file_from_folder(project_key, folder_id, path, max_size_bytes)
+
+@mcp.tool()
+def delete_file_from_folder(project_key: str, folder_id: str, path: str) -> dict[str, Any]:
+    """
+    Delete a file from a managed folder.
+
+    Args:
+        project_key: The project key
+        folder_id: ID of the managed folder
+        path: File path to delete
+
+    Returns:
+        Dict containing deletion result
+    """
+    return managed_folders.delete_file_from_folder(project_key, folder_id, path)
+
+# Register Deployment Tools
+@mcp.tool()
+def list_api_deployer_services() -> dict[str, Any]:
+    """List all services in the API Deployer."""
+    return deployment.list_api_deployer_services()
+
+@mcp.tool()
+def list_api_deployer_deployments(service_id: str | None = None) -> dict[str, Any]:
+    """List deployments in the API Deployer."""
+    return deployment.list_api_deployer_deployments(service_id)
+
+@mcp.tool()
+def list_api_deployer_infras() -> dict[str, Any]:
+    """List infrastructures in the API Deployer."""
+    return deployment.list_api_deployer_infras()
+
+@mcp.tool()
+def get_api_deployment_status(deployment_id: str) -> dict[str, Any]:
+    """Get status of a specific API deployment."""
+    return deployment.get_api_deployment_status(deployment_id)
+
+@mcp.tool()
+def list_project_deployer_projects() -> dict[str, Any]:
+    """List all projects in the Project Deployer."""
+    return deployment.list_project_deployer_projects()
+
+@mcp.tool()
+def list_project_deployer_deployments(published_project_key: str | None = None) -> dict[str, Any]:
+    """List deployments in the Project Deployer."""
+    return deployment.list_project_deployer_deployments(published_project_key)
+
+@mcp.tool()
+def list_project_deployer_infras() -> dict[str, Any]:
+    """List infrastructures in the Project Deployer."""
+    return deployment.list_project_deployer_infras()
+
+@mcp.tool()
+def get_project_deployment_status(deployment_id: str) -> dict[str, Any]:
+    """Get status of a specific project deployment."""
+    return deployment.get_project_deployment_status(deployment_id)
+
+# Register Data Quality Tools
+@mcp.tool()
+def list_data_quality_rules(project_key: str, dataset_name: str) -> dict[str, Any]:
+    """List all data quality rules for a dataset."""
+    return data_quality.list_data_quality_rules(project_key, dataset_name)
+
+@mcp.tool()
+def get_data_quality_status(project_key: str, dataset_name: str) -> dict[str, Any]:
+    """Get the current pass/fail status of data quality rules."""
+    return data_quality.get_data_quality_status(project_key, dataset_name)
+
+@mcp.tool()
+def get_data_quality_results(project_key: str, dataset_name: str) -> dict[str, Any]:
+    """Get the last computed data quality rule results."""
+    return data_quality.get_data_quality_results(project_key, dataset_name)
+
+@mcp.tool()
+def compute_data_quality_rules(project_key: str, dataset_name: str) -> dict[str, Any]:
+    """Trigger computation of data quality rules for a dataset."""
+    return data_quality.compute_data_quality_rules(project_key, dataset_name)
+
+@mcp.tool()
+def create_data_quality_rule(project_key: str, dataset_name: str, rule_config: dict[str, Any]) -> dict[str, Any]:
+    """Create a new data quality rule on a dataset."""
+    return data_quality.create_data_quality_rule(project_key, dataset_name, rule_config)
+
+@mcp.tool()
+def delete_data_quality_rule(project_key: str, dataset_name: str, rule_id: str) -> dict[str, Any]:
+    """Delete a data quality rule from a dataset."""
+    return data_quality.delete_data_quality_rule(project_key, dataset_name, rule_id)
+
+# Register SQL Execution Tools
+@mcp.tool()
+def execute_sql_query(query: str, connection: str, database: str | None = None, query_type: str = "sql", max_rows: int = 10000) -> dict[str, Any]:
+    """
+    Execute a read-only SQL query through a DSS connection.
+
+    Only SELECT queries are allowed. DDL/DML statements are blocked.
+
+    Args:
+        query: SQL query to execute (SELECT only)
+        connection: DSS connection name
+        database: Optional database name
+        query_type: Query type - 'sql', 'hive', or 'impala'
+        max_rows: Maximum rows to return (default 10000, hard cap 50000)
+
+    Returns:
+        Dict containing schema and result rows
+    """
+    return sql_execution.execute_sql_query(query, connection, database, query_type, max_rows)
+
+@mcp.tool()
+def list_sql_connections() -> dict[str, Any]:
+    """List DSS connections that support SQL execution."""
+    return sql_execution.list_sql_connections()
+
+# Register Administration Tools
+@mcp.tool()
+def get_instance_info() -> dict[str, Any]:
+    """Get DSS instance information: version, node type, license."""
+    return administration.get_instance_info()
+
+@mcp.tool()
+def get_general_settings_summary() -> dict[str, Any]:
+    """Get non-sensitive general DSS settings. Sensitive values are masked."""
+    return administration.get_general_settings_summary()
+
+@mcp.tool()
+def get_global_variables() -> dict[str, Any]:
+    """Get global DSS variables. Sensitive values are masked."""
+    return administration.get_global_variables()
+
+@mcp.tool()
+def get_global_usage_summary() -> dict[str, Any]:
+    """Get DSS instance usage summary: project, user, dataset counts."""
+    return administration.get_global_usage_summary()
+
+@mcp.tool()
+def list_dss_logs(max_logs: int = 50) -> dict[str, Any]:
+    """List available DSS log files."""
+    return administration.list_dss_logs(max_logs)
+
+@mcp.tool()
+def get_dss_log(log_name: str, max_lines: int = 500) -> dict[str, Any]:
+    """Get content of a specific DSS log file (tail)."""
+    return administration.get_dss_log(log_name, max_lines)
+
+@mcp.tool()
+def log_custom_audit(audit_type: str, details: dict[str, Any]) -> dict[str, Any]:
+    """Write a custom audit log entry."""
+    return administration.log_custom_audit(audit_type, details)
+
 
 def create_server():
     """Create and configure the MCP server."""

@@ -95,8 +95,8 @@ def create_dataset(
                 path
             )
 
-        # Handle SQL datasets
-        elif dataset_type.lower() == 'sql':
+        # Handle SQL datasets (type can be 'sql', 'SQLServer', 'PostgreSQL', etc.)
+        elif dataset_type.lower() in ('sql', 'sqlserver', 'postgresql', 'mysql', 'oracle', 'synapse'):
             connection = params.get('connection')
             table = params.get('table')
             schema = params.get('schema')
@@ -111,10 +111,21 @@ def create_dataset(
                     )
                 }
 
+            # Resolve actual DB type — 'sql' is generic, need specific connector type
+            actual_type = dataset_type
+            if dataset_type.lower() == 'sql':
+                try:
+                    from dataiku_mcp.client import get_client
+                    client = get_client()
+                    conn_info = client.get_connection(connection).get_info()
+                    actual_type = conn_info.get_type() or 'SQLServer'
+                except Exception:
+                    actual_type = 'SQLServer'
+
             dataset = (
                 project.create_sql_table_dataset(
                     dataset_name,
-                    'sql',
+                    actual_type,
                     connection,
                     table,
                     schema,
@@ -165,6 +176,15 @@ def create_dataset(
                 format_type,
                 format_params
             )
+
+        # For SQL datasets, autodetect schema from the database
+        sql_types = ('sql', 'sqlserver', 'postgresql', 'mysql', 'oracle', 'synapse')
+        if dataset_type.lower() in sql_types:
+            try:
+                auto_settings = dataset.autodetect_settings()
+                auto_settings.save()
+            except Exception:
+                pass  # Schema can be set manually later
 
         # Set additional format parameters if provided
         if (
@@ -598,6 +618,52 @@ def inspect_dataset_schema(
             "message": (
                 "Failed to inspect schema"
                 " for dataset"
+                f" '{dataset_name}': {str(e)}"
+            )
+        }
+
+
+def set_dataset_schema(
+    project_key: str,
+    dataset_name: str,
+    columns: list[dict[str, Any]],
+    drop_and_create: bool = False
+) -> dict[str, Any]:
+    """
+    Set the schema of a dataset.
+
+    Args:
+        project_key: The project key
+        dataset_name: Name of the dataset
+        columns: List of column defs with name and type
+        drop_and_create: If True, drop/recreate underlying table
+
+    Returns:
+        Dict containing schema update result
+    """
+    try:
+        project = get_project_for_write(project_key)
+        dataset = project.get_dataset(dataset_name)
+
+        schema = {"columns": columns, "userModified": True}
+        dataset.set_schema(schema)
+
+        return {
+            "status": "ok",
+            "dataset_name": dataset_name,
+            "column_count": len(columns),
+            "columns": [c["name"] for c in columns],
+            "message": (
+                f"Schema for '{dataset_name}' set"
+                f" successfully ({len(columns)} columns)"
+            )
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": (
+                f"Failed to set schema for"
                 f" '{dataset_name}': {str(e)}"
             )
         }
