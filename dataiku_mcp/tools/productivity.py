@@ -10,7 +10,55 @@ from typing import Any
 
 import yaml
 
-from dataiku_mcp.client import get_client, get_project
+from dataiku_mcp.client import get_client, get_project, get_project_for_write
+
+
+def create_project(
+    project_key: str,
+    name: str,
+    description: str = ""
+) -> dict[str, Any]:
+    """
+    Create a new empty Dataiku project.
+
+    Args:
+        project_key: Unique project key (uppercase, no spaces)
+        name: Display name for the project
+        description: Optional project description
+
+    Returns:
+        Dict containing project creation result
+    """
+    try:
+        client = get_client()
+        auth_info = client.get_auth_info()
+        owner = auth_info.get("authIdentifier", "admin")
+
+        project = client.create_project(project_key, name, owner)
+
+        # Add 'Claude Write' tag and optional description
+        metadata = project.get_metadata()
+        tags = metadata.get("tags", [])
+        if not any(t.lower() == "claude write" for t in tags):
+            tags.append("Claude Write")
+            metadata["tags"] = tags
+        if description:
+            metadata["shortDesc"] = description
+        project.set_metadata(metadata)
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "name": name,
+            "description": description,
+            "message": f"Project '{name}' ({project_key}) created successfully"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to create project '{project_key}': {str(e)}"
+        }
 
 
 def duplicate_project_structure(
@@ -42,7 +90,7 @@ def duplicate_project_structure(
             )
         except Exception as e:
             if "already exists" in str(e).lower():
-                target_project = get_project(
+                target_project = get_project_for_write(
                     target_project_key
                 )
             else:
@@ -788,7 +836,7 @@ def batch_update_objects(
         Dict containing update results
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
 
         # Compile pattern
         try:

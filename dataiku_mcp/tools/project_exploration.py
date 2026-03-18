@@ -5,7 +5,7 @@ Project exploration tools for Dataiku MCP integration.
 import re
 from typing import Any
 
-from dataiku_mcp.client import get_project
+from dataiku_mcp.client import get_client, get_project, get_project_for_write
 
 
 def get_project_flow(
@@ -703,4 +703,221 @@ def get_dataset_sample(
                 "Failed to get dataset sample: "
                 f"{str(e)}"
             ),
+        }
+
+
+def create_flow_zone(
+    project_key: str,
+    zone_name: str,
+    color: str = "#2ab1ac"
+) -> dict[str, Any]:
+    """
+    Create a new zone in the project flow.
+
+    Args:
+        project_key: The project key
+        zone_name: Display name for the zone
+        color: Zone color as hex string (default teal)
+
+    Returns:
+        Dict containing created zone info
+    """
+    try:
+        project = get_project_for_write(project_key)
+        flow = project.get_flow()
+        zone = flow.create_zone(zone_name, color=color)
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "zone_id": zone.id,
+            "zone_name": zone_name,
+            "color": color,
+            "message": f"Zone '{zone_name}' created successfully"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to create flow zone: {str(e)}"
+        }
+
+
+def add_dataset_reference(
+    project_key: str,
+    source_project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Add a reference to a dataset from another project.
+
+    Exposes the dataset from the source project (via add_exposed_object)
+    and returns the reference notation for use in recipe inputs. The
+    foreign dataset appears in the flow automatically when wired as input.
+
+    Exposing does NOT require "Claude Write" tag — it's a sharing action.
+
+    Args:
+        project_key: Target project key
+        source_project_key: Source project key where the dataset lives
+        dataset_name: Name of the dataset to reference
+
+    Returns:
+        Dict containing reference info for use in recipes
+    """
+    try:
+        client = get_client()
+
+        # Verify source dataset exists
+        source_project = client.get_project(source_project_key)
+        source_dataset = source_project.get_dataset(dataset_name)
+        source_raw = source_dataset.get_settings().get_raw()
+
+        ds_type = source_raw.get("type", "unknown")
+        params = source_raw.get("params", {})
+        connection = params.get("connection", "")
+        table = params.get("table", "")
+        schema_name = params.get("schema", "")
+
+        ref = f"{source_project_key}.{dataset_name}"
+
+        # Expose dataset from source project (no Claude Write tag needed)
+        exposed = False
+        expose_error = None
+        try:
+            source_settings = source_project.get_settings()
+            source_settings.add_exposed_object("DATASET", dataset_name, project_key)
+            source_settings.save()
+            exposed = True
+        except Exception as ee:
+            expose_error = str(ee)
+
+        # Get column count
+        col_count = 0
+        try:
+            ds_schema = source_dataset.get_schema()
+            col_count = len(ds_schema.get("columns", []))
+        except Exception:
+            pass
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "source_project_key": source_project_key,
+            "dataset_name": dataset_name,
+            "reference": ref,
+            "exposed": exposed,
+            "expose_error": expose_error,
+            "dataset_type": ds_type,
+            "connection": connection,
+            "table": f"{schema_name}.{table}" if schema_name else table,
+            "column_count": col_count,
+            "message": (
+                f"Dataset '{dataset_name}' exposed from {source_project_key} to {project_key}. "
+                f"Use create_recipe with input '{dataset_name}' and project_key='{source_project_key}' "
+                f"in the with_input call (the builder handles the cross-project reference)."
+            )
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to add dataset reference: {str(e)}"
+        }
+
+
+def move_to_zone(
+    project_key: str,
+    zone_id: str,
+    items: list[dict[str, str]]
+) -> dict[str, Any]:
+    """
+    Move datasets, recipes, or managed folders into a flow zone.
+
+    Args:
+        project_key: The project key
+        zone_id: ID of the target zone (from create_flow_zone)
+        items: List of items to move, each with 'type' and 'name'.
+               type must be 'dataset', 'recipe', or 'managed_folder'.
+
+    Returns:
+        Dict containing move results
+    """
+    try:
+        project = get_project_for_write(project_key)
+        flow = project.get_flow()
+        zone = flow.get_zone(zone_id)
+
+        moved = []
+        errors = []
+
+        for item in items:
+            item_type = item.get("type", "").lower()
+            item_name = item.get("name", "")
+            try:
+                if item_type == "dataset":
+                    obj = project.get_dataset(item_name)
+                elif item_type == "recipe":
+                    obj = project.get_recipe(item_name)
+                elif item_type == "managed_folder":
+                    obj = project.get_managed_folder(item_name)
+                else:
+                    errors.append({"name": item_name, "error": f"Unknown type '{item_type}'"})
+                    continue
+                zone.add_item(obj)
+                moved.append({"type": item_type, "name": item_name})
+            except Exception as e:
+                errors.append({"name": item_name, "error": str(e)})
+
+        return {
+            "status": "ok" if not errors else "partial",
+            "project_key": project_key,
+            "zone_id": zone_id,
+            "moved": moved,
+            "errors": errors,
+            "message": f"Moved {len(moved)} items to zone. {len(errors)} errors."
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to move items to zone: {str(e)}"
+        }
+
+
+def propagate_schema(
+    project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Propagate schema changes from a dataset through downstream recipes.
+
+    Args:
+        project_key: The project key
+        dataset_name: Name of the dataset to propagate from
+
+    Returns:
+        Dict containing propagation results
+    """
+    try:
+        project = get_project_for_write(project_key)
+        flow = project.get_flow()
+
+        propagation = flow.new_schema_propagation(dataset_name)
+        propagation.set_auto_rebuild(True)
+        future = propagation.start()
+        result = future.wait_for_result()
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "dataset_name": dataset_name,
+            "result": result if isinstance(result, dict) else str(result),
+            "message": f"Schema propagation completed from '{dataset_name}'"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to propagate schema from '{dataset_name}': {str(e)}"
         }

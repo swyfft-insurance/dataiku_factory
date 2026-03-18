@@ -8,7 +8,7 @@ DSS projects through the dataiku-api-client.
 
 from typing import Any
 
-from dataiku_mcp.client import get_project
+from dataiku_mcp.client import get_project, get_project_for_write
 
 
 def create_dataset(
@@ -49,7 +49,7 @@ def create_dataset(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         params = params or {}
 
         # Handle managed datasets
@@ -232,7 +232,7 @@ def update_dataset(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         dataset = project.get_dataset(dataset_name)
 
         updated_fields = []
@@ -381,13 +381,14 @@ def delete_dataset(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         dataset = project.get_dataset(dataset_name)
 
         # Store dataset info before deletion
         dataset_info = {
             "name": dataset_name,
-            "type": dataset.get_type(),
+            "type": dataset.get_settings()
+                .get_raw().get("type", "unknown"),
             "id": dataset.id
         }
 
@@ -442,7 +443,7 @@ def build_dataset(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         dataset = project.get_dataset(dataset_name)
 
         # Prepare build parameters
@@ -624,83 +625,36 @@ def check_dataset_metrics(
         dataset = project.get_dataset(dataset_name)
 
         # Get the last metric values
-        metrics = dataset.get_last_metric_values()
+        # (ComputedMetrics object, not a dict)
+        metrics_obj = dataset.get_last_metric_values()
 
         # Process metrics data
         processed_metrics = {}
+        has_metrics = False
 
-        if metrics:
-            # Basic metrics
-            if 'basic' in metrics:
-                basic = metrics['basic']
-                processed_metrics['basic'] = {
-                    'record_count': basic.get(
-                        'COUNT_RECORDS', {}
-                    ).get('value'),
-                    'column_count': basic.get(
-                        'COUNT_COLUMNS', {}
-                    ).get('value'),
-                    'file_size': basic.get(
-                        'SIZE_BYTES', {}
-                    ).get('value'),
-                    'file_count': basic.get(
-                        'COUNT_FILES', {}
-                    ).get('value')
-                }
+        if metrics_obj:
+            metric_ids = metrics_obj.get_all_ids()
+            has_metrics = bool(metric_ids)
 
-            # Validity metrics
-            if 'validity' in metrics:
-                validity = metrics['validity']
-                processed_metrics['validity'] = {}
-                for name, data in validity.items():
-                    processed_metrics[
-                        'validity'
-                    ][name] = {
-                        'value': data.get('value'),
-                        'valid': data.get(
-                            'valid', True
-                        )
-                    }
-
-            # Column statistics
-            if 'columnStats' in metrics:
-                col_stats = metrics['columnStats']
-                processed_metrics[
-                    'column_stats'
-                ] = {}
-                for col_name, stats in (
-                    col_stats.items()
-                ):
-                    cd = stats.get(
-                        'countDistinct', {}
-                    ).get('value')
-                    cnn = stats.get(
-                        'countNonNull', {}
-                    ).get('value')
-                    processed_metrics[
-                        'column_stats'
-                    ][col_name] = {
-                        'min': stats.get(
-                            'min', {}
-                        ).get('value'),
-                        'max': stats.get(
-                            'max', {}
-                        ).get('value'),
-                        'avg': stats.get(
-                            'avg', {}
-                        ).get('value'),
-                        'std': stats.get(
-                            'std', {}
-                        ).get('value'),
-                        'count_distinct': cd,
-                        'count_non_null': cnn,
-                    }
+            for metric_id in metric_ids:
+                try:
+                    value = (
+                        metrics_obj
+                        .get_global_value(metric_id)
+                    )
+                    processed_metrics[metric_id] = (
+                        value
+                    )
+                except Exception:
+                    processed_metrics[metric_id] = (
+                        None
+                    )
 
         return {
             "status": "ok",
             "dataset_name": dataset_name,
             "metrics": processed_metrics,
-            "has_metrics": bool(metrics),
+            "has_metrics": has_metrics,
             "message": (
                 "Metrics for dataset"
                 f" '{dataset_name}'"
@@ -970,7 +924,7 @@ def clear_dataset(
         or error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         dataset = project.get_dataset(dataset_name)
 
         # Prepare clear parameters

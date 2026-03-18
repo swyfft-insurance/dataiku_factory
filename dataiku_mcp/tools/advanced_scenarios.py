@@ -5,7 +5,7 @@ Advanced scenario management tools for Dataiku MCP.
 import copy
 from typing import Any
 
-from dataiku_mcp.client import get_project
+from dataiku_mcp.client import get_project, get_project_for_write
 
 
 def get_scenario_logs(
@@ -362,7 +362,7 @@ def clone_scenario(
         Dict containing cloned scenario information
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         source_scenario = project.get_scenario(
             source_scenario_id
         )

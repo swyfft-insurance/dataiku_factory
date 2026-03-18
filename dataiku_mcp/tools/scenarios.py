@@ -8,7 +8,7 @@ through the dataiku-api-client.
 
 from typing import Any
 
-from dataiku_mcp.client import get_project
+from dataiku_mcp.client import get_project, get_project_for_write
 
 
 def create_scenario(
@@ -46,7 +46,7 @@ def create_scenario(
         }
 
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
 
         # Set default definition if not provided
         if definition is None:
@@ -110,7 +110,7 @@ def update_scenario(
         message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         scenario = project.get_scenario(scenario_id)
 
         updated_fields = []
@@ -255,7 +255,7 @@ def delete_scenario(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         scenario = project.get_scenario(scenario_id)
 
         # Store scenario info before deletion
@@ -367,7 +367,7 @@ def add_scenario_trigger(
         }
 
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         scenario = project.get_scenario(scenario_id)
         settings = scenario.get_settings()
 
@@ -531,7 +531,7 @@ def remove_scenario_trigger(
         error message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         scenario = project.get_scenario(scenario_id)
         settings = scenario.get_settings()
 
@@ -618,7 +618,7 @@ def run_scenario(
         message
     """
     try:
-        project = get_project(project_key)
+        project = get_project_for_write(project_key)
         scenario = project.get_scenario(scenario_id)
 
         if wait:

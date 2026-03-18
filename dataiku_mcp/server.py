@@ -128,6 +128,28 @@ def run_recipe(
         project_key, recipe_name, build_mode
     )
 
+@mcp.tool()
+def compute_schema_updates(
+    project_key: str,
+    recipe_name: str
+) -> dict[str, Any]:
+    """
+    Compute and apply schema updates for a recipe's output datasets.
+
+    Call this after creating a recipe before running it, so the output
+    dataset schema matches what the recipe will produce.
+
+    Args:
+        project_key: The project key
+        recipe_name: Name of the recipe
+
+    Returns:
+        Dict with schema update results
+    """
+    return recipes.compute_schema_updates(
+        project_key, recipe_name
+    )
+
 # Register Dataset Tools
 @mcp.tool()
 def create_dataset(
@@ -592,6 +614,91 @@ def get_project_flow(
     )
 
 @mcp.tool()
+def create_flow_zone(
+    project_key: str,
+    zone_name: str,
+    color: str = "#2ab1ac"
+) -> dict[str, Any]:
+    """
+    Create a new zone in the project flow.
+
+    Args:
+        project_key: The project key
+        zone_name: Display name for the zone
+        color: Zone color as hex string (default teal)
+
+    Returns:
+        Dict containing created zone info
+    """
+    return project_exploration.create_flow_zone(
+        project_key, zone_name, color
+    )
+
+@mcp.tool()
+def add_dataset_reference(
+    project_key: str,
+    source_project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Add a reference to a dataset from another project.
+
+    The source dataset must be shared/exposed from its project.
+
+    Args:
+        project_key: Target project key
+        source_project_key: Source project key where the dataset lives
+        dataset_name: Name of the dataset to reference
+
+    Returns:
+        Dict containing reference creation result
+    """
+    return project_exploration.add_dataset_reference(
+        project_key, source_project_key, dataset_name
+    )
+
+@mcp.tool()
+def move_to_zone(
+    project_key: str,
+    zone_id: str,
+    items: list[dict[str, str]]
+) -> dict[str, Any]:
+    """
+    Move datasets, recipes, or managed folders into a flow zone.
+
+    Args:
+        project_key: The project key
+        zone_id: ID of the target zone (from create_flow_zone)
+        items: List of items to move, each with 'type' and 'name'.
+               type: 'dataset', 'recipe', or 'managed_folder'.
+
+    Returns:
+        Dict containing move results
+    """
+    return project_exploration.move_to_zone(
+        project_key, zone_id, items
+    )
+
+@mcp.tool()
+def propagate_schema(
+    project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Propagate schema changes from a dataset through downstream recipes.
+
+    Args:
+        project_key: The project key
+        dataset_name: Name of the dataset to propagate from
+
+    Returns:
+        Dict containing propagation results
+    """
+    return project_exploration.propagate_schema(
+        project_key, dataset_name
+    )
+
+@mcp.tool()
 def search_project_objects(
     project_key: str,
     search_term: str,
@@ -754,6 +861,27 @@ def cancel_running_jobs(
     )
 
 # Register Productivity Tools
+@mcp.tool()
+def create_project(
+    project_key: str,
+    name: str,
+    description: str = ""
+) -> dict[str, Any]:
+    """
+    Create a new empty Dataiku project.
+
+    Args:
+        project_key: Unique project key (uppercase, no spaces)
+        name: Display name for the project
+        description: Optional project description
+
+    Returns:
+        Dict containing project creation result
+    """
+    return productivity.create_project(
+        project_key, name, description
+    )
+
 @mcp.tool()
 def duplicate_project_structure(
     source_project_key: str,
