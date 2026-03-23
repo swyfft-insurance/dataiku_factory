@@ -11,6 +11,23 @@ from typing import Any
 
 from dataiku_mcp.client import get_project, get_project_for_write
 
+_CODE_RECIPE_TYPES = frozenset((
+    'python', 'r', 'sql_script', 'pyspark',
+    'sparkr', 'sparksql', 'shell',
+))
+
+
+def _set_recipe_code(settings, recipe_type: str, code: str) -> None:
+    """Set code on a recipe using the correct method for its type.
+
+    Code recipes (python, r, sql_script, etc.) use set_code().
+    Payload-based recipes (sql_query, and anything else) use set_payload().
+    """
+    if recipe_type in _CODE_RECIPE_TYPES:
+        settings.set_code(code)
+    else:
+        settings.set_payload(code)
+
 
 def create_recipe(
     project_key: str,
@@ -89,19 +106,9 @@ def create_recipe(
         if code:
             try:
                 settings = recipe.get_settings()
-                # sql_query recipes use set_payload, not set_code
-                if recipe_type == 'sql_query':
-                    settings.set_payload(code)
-                    settings.save()
-                    code_set = True
-                elif recipe_type in ('python', 'r', 'sql_script', 'pyspark', 'sparkr', 'sparksql', 'shell'):
-                    settings.set_code(code)
-                    settings.save()
-                    code_set = True
-                else:
-                    settings.set_payload(code)
-                    settings.save()
-                    code_set = True
+                _set_recipe_code(settings, recipe_type, code)
+                settings.save()
+                code_set = True
             except Exception as code_exc:
                 code_error = str(code_exc)
 
@@ -155,23 +162,31 @@ def update_recipe(
         # Update code if provided
         if 'code' in kwargs:
             settings = recipe.get_settings()
-            # Detect recipe type for correct code-setting method
-            recipe_type = getattr(settings, 'type', None)
+            # Detect recipe type for correct code-setting method.
+            # Priority: get_definition() is the most reliable source,
+            # then settings.type, then recipe_params.
+            recipe_type = ""
+            try:
+                recipe_type = recipe.get_definition().get("type", "")
+            except Exception:
+                pass
+            if not recipe_type:
+                recipe_type = getattr(settings, 'type', None) or ""
             if not recipe_type:
                 try:
                     recipe_type = settings.get_recipe_params().get("type", "")
                 except Exception:
                     recipe_type = ""
+            # Last resort: if we still can't detect the type, probe
+            # whether the recipe is payload-based or code-based
             if not recipe_type:
                 try:
-                    recipe_type = recipe.get_definition().get("type", "")
+                    payload = settings.get_payload()
+                    if payload:
+                        recipe_type = "_payload_based"
                 except Exception:
-                    recipe_type = ""
-            # sql_query uses set_payload, not set_code
-            if recipe_type == "sql_query":
-                settings.set_payload(kwargs['code'])
-            else:
-                settings.set_code(kwargs['code'])
+                    pass
+            _set_recipe_code(settings, recipe_type, kwargs['code'])
             settings.save()
             updated_fields.append('code')
 
