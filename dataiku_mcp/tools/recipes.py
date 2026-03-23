@@ -155,18 +155,30 @@ def update_recipe(
         # Update code if provided
         if 'code' in kwargs:
             settings = recipe.get_settings()
-            # Detect recipe type for correct code-setting method
-            recipe_type = getattr(settings, 'type', None)
+            # Detect recipe type for correct code-setting method.
+            # Priority: get_definition() is the most reliable source,
+            # then settings.type, then recipe_params.
+            recipe_type = ""
+            try:
+                recipe_type = recipe.get_definition().get("type", "")
+            except Exception:
+                pass
+            if not recipe_type:
+                recipe_type = getattr(settings, 'type', None) or ""
             if not recipe_type:
                 try:
                     recipe_type = settings.get_recipe_params().get("type", "")
                 except Exception:
                     recipe_type = ""
+            # Last resort: if we still can't detect the type, try
+            # get_payload() — if it returns content, it's payload-based
             if not recipe_type:
                 try:
-                    recipe_type = recipe.get_definition().get("type", "")
+                    payload = settings.get_payload()
+                    if payload:
+                        recipe_type = "sql_query"
                 except Exception:
-                    recipe_type = ""
+                    pass
             # sql_query uses set_payload, not set_code
             if recipe_type == "sql_query":
                 settings.set_payload(kwargs['code'])
