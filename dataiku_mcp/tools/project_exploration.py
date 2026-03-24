@@ -743,6 +743,75 @@ def create_flow_zone(
         }
 
 
+def list_flow_zones(project_key: str) -> dict[str, Any]:
+    """
+    List all flow zones in a project with their contained items.
+
+    Args:
+        project_key: The project key
+
+    Returns:
+        Dict containing zones with their items (datasets, recipes, managed folders)
+    """
+    try:
+        project = get_project(project_key)
+        flow = project.get_flow()
+        zones = flow.list_zones()
+
+        def _serialize_item(item):
+            """Serialize a flow zone item (DSSDataset, DSSRecipe, etc.) to a dict."""
+            if isinstance(item, dict):
+                return {
+                    "type": item.get("type", "unknown"),
+                    "ref": item.get("ref", "unknown"),
+                }
+            # Derive type from class name: DSSDataset -> dataset, DSSRecipe -> recipe, etc.
+            cls_name = type(item).__name__
+            if "Dataset" in cls_name:
+                item_type = "dataset"
+            elif "Recipe" in cls_name:
+                item_type = "recipe"
+            elif "ManagedFolder" in cls_name:
+                item_type = "managed_folder"
+            elif "SavedModel" in cls_name:
+                item_type = "saved_model"
+            elif "ModelEvaluationStore" in cls_name:
+                item_type = "model_evaluation_store"
+            elif "StreamingEndpoint" in cls_name:
+                item_type = "streaming_endpoint"
+            else:
+                item_type = cls_name
+            return {
+                "type": item_type,
+                "id": getattr(item, "id", getattr(item, "name", str(item))),
+            }
+
+        result = []
+        for zone in zones:
+            items = [_serialize_item(item) for item in zone.items]
+            shared = [_serialize_item(item) for item in zone.shared]
+            result.append({
+                "id": zone.id,
+                "name": zone.name,
+                "color": zone.color,
+                "items": items,
+                "shared": shared,
+            })
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "zone_count": len(result),
+            "zones": result,
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to list flow zones: {str(e)}"
+        }
+
+
 def add_dataset_reference(
     project_key: str,
     source_project_key: str,
