@@ -640,6 +640,16 @@ def create_flow_zone(
     )
 
 @mcp.tool()
+def list_flow_zones(project_key: str) -> dict[str, Any]:
+    """List all flow zones in a project with metadata (id, name, color, item/shared counts). Use get_flow_zone to retrieve items for a specific zone."""
+    return project_exploration.list_flow_zones(project_key)
+
+@mcp.tool()
+def get_flow_zone(project_key: str, zone_id: str) -> dict[str, Any]:
+    """Get a specific flow zone's contents, grouped by type (datasets, recipes, managed_folders, etc.) with shared items separate."""
+    return project_exploration.get_flow_zone(project_key, zone_id)
+
+@mcp.tool()
 def add_dataset_reference(
     project_key: str,
     source_project_key: str,
