@@ -748,7 +748,7 @@ def _serialize_item(item):
     if isinstance(item, dict):
         return {
             "type": item.get("type", "unknown"),
-            "ref": item.get("ref", "unknown"),
+            "id": item.get("id", item.get("ref", "unknown")),
         }
     # Derive type from class name: DSSDataset -> dataset, DSSRecipe -> recipe, etc.
     cls_name = type(item).__name__
