@@ -30,6 +30,12 @@ propagate_schema   →  get flow, find recipe, propagate, report changes
 
 New tools may be either type — use judgment about what's useful as a single MCP operation.
 
+## Tool Design Philosophy
+
+**Each tool returns one level of information.** `list_*` returns IDs, names, and metadata. A separate `get_*` returns details for a specific item. Never recurse the whole tree in one response — large projects produce massive payloads that blow context limits. Let the caller decide when to go deeper.
+
+Example: `list_flow_zones` returns zone IDs/names/colors/counts. `get_flow_zone` takes a zone ID and returns that zone's items.
+
 ## Adding a New Tool
 
 | Step | File | What to do |
