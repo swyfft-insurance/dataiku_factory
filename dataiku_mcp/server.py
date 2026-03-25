@@ -155,6 +155,32 @@ def compute_schema_updates(
         project_key, recipe_name
     )
 
+@mcp.tool()
+def replace_recipe_input(
+    project_key: str,
+    recipe_name: str,
+    current_input: str,
+    new_input: str
+) -> dict[str, Any]:
+    """
+    Replace one input dataset reference with another in a recipe.
+
+    Input refs use "PROJECTKEY.DatasetName" for cross-project datasets,
+    or just "DatasetName" for local datasets.
+
+    Args:
+        project_key: Dataiku project key, uppercase (e.g. 'DATAWAREHOUSE')
+        recipe_name: Name of the recipe to update
+        current_input: Current input ref to replace (e.g. 'DATAWAREHOUSE.FactLoss')
+        new_input: New input ref (e.g. 'DWREFERENCE.FactLoss')
+
+    Returns:
+        Dict with before/after inputs
+    """
+    return recipes.replace_recipe_input(
+        project_key, recipe_name, current_input, new_input
+    )
+
 # Register Dataset Tools
 @mcp.tool()
 def create_dataset(
@@ -659,6 +685,57 @@ def add_dataset_reference(
         Dict containing reference creation result
     """
     return project_exploration.add_dataset_reference(
+        project_key, source_project_key, dataset_name
+    )
+
+@mcp.tool()
+def switch_dataset_source(
+    project_key: str,
+    dataset_name: str,
+    old_source_project: str,
+    new_source_project: str
+) -> dict[str, Any]:
+    """
+    Switch a foreign dataset reference from one source project to another
+    across ALL recipes in the flow.
+
+    Auto-exposes from the new source and replaces all recipe inputs.
+    Call remove_dataset_reference after to clean up the old node.
+
+    Args:
+        project_key: Dataiku project key, uppercase (e.g. 'TOPA2023EANDSNOTIONAL')
+        dataset_name: Dataset name (e.g. 'DimCompanyLine')
+        old_source_project: Current source (e.g. 'DATAWAREHOUSE')
+        new_source_project: New source (e.g. 'DWREFERENCE')
+
+    Returns:
+        Dict with replacement status
+    """
+    return project_exploration.switch_dataset_source(
+        project_key, dataset_name, old_source_project, new_source_project
+    )
+
+@mcp.tool()
+def remove_dataset_reference(
+    project_key: str,
+    source_project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Remove a foreign dataset reference by un-exposing it from the source project.
+
+    Removes the target project from the source's exposed object rules.
+    Use after replacing recipe inputs to clean up old cross-project references.
+
+    Args:
+        project_key: Target project key (the consumer that no longer needs the reference)
+        source_project_key: Source project key where the dataset lives
+        dataset_name: Name of the dataset to un-expose
+
+    Returns:
+        Dict with removal status
+    """
+    return project_exploration.remove_dataset_reference(
         project_key, source_project_key, dataset_name
     )
 

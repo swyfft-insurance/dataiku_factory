@@ -552,6 +552,78 @@ def list_recipes(
         }
 
 
+def replace_recipe_input(
+    project_key: str,
+    recipe_name: str,
+    current_input: str,
+    new_input: str
+) -> dict[str, Any]:
+    """
+    Replace one input dataset reference with another in a recipe.
+
+    Input refs use "PROJECTKEY.DatasetName" for cross-project datasets,
+    or just "DatasetName" for local datasets.
+
+    Args:
+        project_key: The project key containing the recipe
+        recipe_name: Name of the recipe to update
+        current_input: Current input reference to replace
+        new_input: New input reference to use instead
+
+    Returns:
+        Dict with status, before/after inputs, or error
+    """
+    try:
+        project = get_project_for_write(project_key)
+        recipe = project.get_recipe(recipe_name)
+        settings = recipe.get_settings()
+
+        # Get current inputs for reporting
+        before_inputs = settings.get_flat_input_refs()
+
+        if current_input not in before_inputs:
+            return {
+                "status": "error",
+                "message": (
+                    f"Input '{current_input}' not found in recipe "
+                    f"'{recipe_name}'. Current inputs: {before_inputs}"
+                )
+            }
+
+        # Replace the input
+        settings.replace_input(current_input, new_input)
+        settings.save()
+
+        # Get updated inputs for confirmation
+        settings_after = recipe.get_settings()
+        after_inputs = settings_after.get_flat_input_refs()
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "recipe_name": recipe_name,
+            "replaced": {
+                "from": current_input,
+                "to": new_input
+            },
+            "inputs_before": before_inputs,
+            "inputs_after": after_inputs,
+            "message": (
+                f"Replaced input '{current_input}' with "
+                f"'{new_input}' in recipe '{recipe_name}'"
+            )
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": (
+                f"Failed to replace input in recipe "
+                f"'{recipe_name}': {str(e)}"
+            )
+        }
+
+
 def compute_schema_updates(
     project_key: str,
     recipe_name: str

@@ -826,6 +826,171 @@ def add_dataset_reference(
         }
 
 
+def switch_dataset_source(
+    project_key: str,
+    dataset_name: str,
+    old_source_project: str,
+    new_source_project: str
+) -> dict[str, Any]:
+    """
+    Switch a foreign dataset reference from one source project to another
+    across ALL recipes in the flow.
+
+    Uses DSSProjectFlow.replace_input_computable() which:
+    1. Auto-exposes the dataset from the new source project
+    2. Replaces ALL recipe inputs referencing the old source
+    3. Does NOT remove the old foreign dataset node (call remove_dataset_reference after)
+
+    Args:
+        project_key: The consuming project key
+        dataset_name: Name of the dataset (e.g. 'DimCompanyLine')
+        old_source_project: Current source project key (e.g. 'DATAWAREHOUSE')
+        new_source_project: New source project key (e.g. 'DWREFERENCE')
+
+    Returns:
+        Dict with status and details of the replacement
+    """
+    try:
+        client = get_client()
+        # Use client.get_project() directly — replace_input_computable is a
+        # flow-level operation that doesn't require "Claude Write" tag.
+        project = client.get_project(project_key)
+        flow = project.get_flow()
+
+        old_ref = f"{old_source_project}.{dataset_name}"
+        new_ref = f"{new_source_project}.{dataset_name}"
+
+        # Ensure the dataset is exposed from the new source to this project
+        try:
+            source_project = client.get_project(new_source_project)
+            source_settings = source_project.get_settings()
+            source_settings.add_exposed_object("DATASET", dataset_name, project_key)
+            source_settings.save()
+        except Exception:
+            pass  # May already be exposed
+
+        flow.replace_input_computable(old_ref, new_ref, type="DATASET")
+
+        return {
+            "status": "ok",
+            "project_key": project_key,
+            "dataset_name": dataset_name,
+            "old_ref": old_ref,
+            "new_ref": new_ref,
+            "message": (
+                f"Replaced '{old_ref}' with '{new_ref}' "
+                f"across all recipes in '{project_key}'"
+            )
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": (
+                f"Failed to switch '{dataset_name}' from "
+                f"'{old_source_project}' to '{new_source_project}': {str(e)}"
+            )
+        }
+
+
+def remove_dataset_reference(
+    project_key: str,
+    source_project_key: str,
+    dataset_name: str
+) -> dict[str, Any]:
+    """
+    Remove a foreign dataset reference from a project's flow.
+
+    Performs two steps (mirroring the UI Delete behavior):
+    1. Un-expose the dataset from the source project settings
+    2. Delete the orphaned foreign dataset node from the consuming project
+
+    Args:
+        project_key: Target project key (the consumer with the foreign reference)
+        source_project_key: Source project key where the dataset lives
+        dataset_name: Name of the dataset to remove
+
+    Returns:
+        Dict with removal status and details of each step
+    """
+    try:
+        client = get_client()
+        foreign_name = f"{source_project_key}.{dataset_name}"
+        steps = {}
+
+        # Step 1: Un-expose from source project settings
+        try:
+            source_project = client.get_project(source_project_key)
+            source_settings = source_project.get_settings()
+            raw = source_settings.get_raw()
+
+            exposed_objects = raw.get("exposedObjects", {}).get("objects", [])
+
+            for obj in exposed_objects:
+                if obj.get("type") == "DATASET" and obj.get("localName") == dataset_name:
+                    rules = obj.get("rules", [])
+                    new_rules = [
+                        r for r in rules
+                        if r.get("targetProject") != project_key
+                    ]
+                    if len(new_rules) < len(rules):
+                        if new_rules:
+                            obj["rules"] = new_rules
+                        else:
+                            exposed_objects.remove(obj)
+                        source_settings.save()
+                        steps["unexpose"] = "ok"
+                    else:
+                        steps["unexpose"] = "no matching rule found"
+                    break
+            else:
+                steps["unexpose"] = "dataset not found in exposed objects"
+        except Exception as e:
+            steps["unexpose"] = f"error: {str(e)}"
+
+        # Step 2: Delete orphaned foreign dataset node from consuming project
+        # Try multiple REST API endpoints to find the one that works
+        delete_errors = []
+        deleted = False
+
+        # Try: DELETE /projects/{key}/datasets/{SOURCEPROJECT.DatasetName}
+        for name_variant in [foreign_name, dataset_name]:
+            try:
+                client._perform_empty(
+                    "DELETE",
+                    f"/projects/{project_key}/datasets/{name_variant}"
+                )
+                steps["delete_node"] = f"ok (name: {name_variant})"
+                deleted = True
+                break
+            except Exception as e:
+                delete_errors.append(f"{name_variant}: {str(e)}")
+
+        if not deleted:
+            steps["delete_node"] = f"failed — {'; '.join(delete_errors)}"
+
+        overall_ok = steps.get("unexpose") == "ok" or deleted
+        return {
+            "status": "ok" if overall_ok else "partial",
+            "project_key": project_key,
+            "source_project_key": source_project_key,
+            "dataset_name": dataset_name,
+            "foreign_name": foreign_name,
+            "steps": steps,
+            "message": (
+                f"Removed '{foreign_name}' from '{project_key}'"
+                if overall_ok
+                else f"Partial removal of '{foreign_name}' — check steps for details"
+            )
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to remove dataset reference: {str(e)}"
+        }
+
+
 def move_to_zone(
     project_key: str,
     zone_id: str,
